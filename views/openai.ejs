@@ -1,0 +1,25 @@
+<!-- views/openai.ejs -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat with GPT-4o-mini</title>
+</head>
+<body>
+    <%- include('partials/navbar') %>
+    <h1>Chat with GPT-4o-mini</h1>
+    <form id="prompt-form" method="POST">
+        <label for="prompt">Enter your prompt:</label><br>
+        <textarea id="prompt" name="prompt" rows="4" cols="50"></textarea><br><br>
+        <button type="submit">Submit</button>
+    </form>
+    <div id="response-container">
+        <% if (response) { %>
+            <h2>Response:</h2>
+            <div><%= response %></div>
+        <% } %>
+    </div>
+
+</body>
+<script src="/scripts/jquery/dist/jquery.min.js"></script> 
+<script src="/js/ai.js"></script>
+</html>

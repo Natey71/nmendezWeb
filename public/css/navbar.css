@@ -1,0 +1,58 @@
+body {
+  font-family: Arial, sans-serif;
+}
+/* Navbar overall styling */
+.navbar {
+    width: 100%;
+    background-color: #333; /* Change to your preferred color */
+}
+  
+.navbar a {
+  padding: 8px 12px;
+}
+/* Container for the brand, menu, and share buttons */
+.navbar-container {
+    display: flex;
+    align-items: center;
+}
+  
+/* Branding link (logo or site name) */
+.navbar-brand {
+    color: #fff;
+    text-decoration: none;
+    font-weight: bold;
+    /* Add any other styling you like (font-size, margin, etc.) */
+}
+  
+  /* Menu list reset and horizontal alignment */
+.navbar-menu {
+    list-style: none; /* Remove default bullets */
+    margin: 0;
+    padding-left: 20;
+    display: flex; /* Lay out the li elements side by side */
+    gap: 1rem;     /* Space between the menu items; you can also use margin on each li */
+}
+  
+  /* Individual menu items */
+.navbar-menu li {
+    /* If you need additional styling for each li, add it here */
+}
+  
+  /* Links inside the menu items */
+.navbar-menu li a {
+    color: #fff;
+    text-decoration: none;
+    padding: 0.5rem;
+    transition: background-color 0.3s ease; /* A smooth hover transition */
+}
+  
+.navbar-menu li a:hover {
+    background-color: #555; /* Hover color (optional) */
+}
+  
+  /* Share buttons container styling */
+.share-buttons {
+    margin-left: auto;
+    /* You can add styling here or use flex inside if you have multiple share buttons */
+}
+  

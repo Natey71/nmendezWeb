@@ -1,0 +1,23 @@
+<!-- index.ejs -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/energyTransmission.css">
+</head>
+<body>
+    <%- include('partials/navbar') %>
+    <button id="download" class="download">Make Chart</button>
+    <div class="div1">
+      <canvas id="myChart" style="height: 100%; width: 100%;"></canvas>
+    </div>
+    
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="/scripts/jquery/dist/jquery.min.js"></script> 
+  <script type="module" src="/js/energyTransmission.js"></script>
+
+</body>
+</html>
