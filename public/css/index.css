@@ -1,0 +1,191 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+/* General Styles */
+:root {
+  --primary-color: #4a90e2;
+  --secondary-color: #2c3e50;
+  --accent-color: #e74c3c;
+  --text-color: #333;
+  --light-bg: #f5f6fa;
+}
+
+body {
+  margin: 0;
+  font-family: 'Arial', sans-serif;
+  line-height: 1.6;
+  color: var(--text-color);
+}
+
+/* Hero Section */
+.hero {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  padding: 100px 20px;
+  text-align: center;
+}
+
+.hero-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.hero h1 {
+  font-size: 3em;
+  margin-bottom: 20px;
+}
+
+.hero-subtitle {
+  font-size: 1.5em;
+  margin-bottom: 30px;
+}
+
+/* Tech Stack Section */
+.tech-stack {
+  padding: 80px 20px;
+  background: var(--light-bg);
+}
+
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.tech-item {
+  text-align: left;
+  padding: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.tech-item:hover {
+  transform: translateY(-5px);
+}
+
+.tech-item-content {
+  flex: 1;
+}
+
+.tech-item i {
+  font-size: 4em;
+  color: var(--primary-color);
+  margin-left: 20px;
+  transition: transform 0.3s ease;
+}
+
+.tech-item:hover i {
+  transform: scale(1.1);
+}
+
+.tech-item h3 {
+  margin: 0 0 10px 0;
+  color: var(--secondary-color);
+}
+
+.tech-item p {
+  margin: 0;
+  color: #666;
+}
+
+/* Features Section */
+.features {
+  padding: 80px 20px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.feature-card {
+  text-align: center;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+}
+
+.feature-icon {
+  font-size: 2.5em;
+  color: var(--primary-color);
+  margin-bottom: 20px;
+}
+
+/* CTA Section */
+.cta-section {
+  background: var(--secondary-color);
+  color: white;
+  text-align: center;
+  padding: 80px 20px;
+}
+
+.cta-buttons {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-top: 30px;
+}
+
+.cta-button {
+  display: inline-block;
+  padding: 15px 30px;
+  border-radius: 5px;
+  text-decoration: none;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.cta-button.primary {
+  background: var(--accent-color);
+  color: white;
+}
+
+.cta-button.secondary {
+  background: transparent;
+  border: 2px solid white;
+  color: white;
+}
+
+.cta-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 20px;
+  background: var(--secondary-color);
+  color: white;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: 2em;
+  }
+  
+  .hero-subtitle {
+    font-size: 1.2em;
+  }
+  
+  .cta-buttons {
+    flex-direction: column;
+  }
+} 
