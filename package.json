@@ -37,8 +37,11 @@
     "ejs": "^3.1.10",
     "env": "^0.0.2",
     "express": "^4.21.2",
+    "express-session": "^1.18.1",
     "jquery": "^3.7.1",
-    "openai": "^4.80.1"
+    "openai": "^4.80.1",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

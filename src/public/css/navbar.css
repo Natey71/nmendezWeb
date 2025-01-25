@@ -50,9 +50,11 @@ body {
     background-color: #555; /* Hover color (optional) */
 }
   
-  /* Share buttons container styling */
-.share-buttons {
-    margin-left: auto;
-    /* You can add styling here or use flex inside if you have multiple share buttons */
+.auth-buttons {
+    margin-left: auto; /* This pushes the auth buttons to the right */
+    display: flex;
+    align-items: center;
+    gap: 15px;
 }
+
   
