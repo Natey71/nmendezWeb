@@ -35,7 +35,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 // Start server
-const PORT = dotenv.PORT;
+const PORT = dotenv.PORT || 3000;
 console.log(PORT);
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

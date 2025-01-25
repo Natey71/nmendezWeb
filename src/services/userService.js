@@ -10,7 +10,18 @@ const addUser = async (user) => {
   try {
     await dynamoDB.put(params);
     console.log('User added successfully');
+    return {
+      success: true,
+      message: 'User added successfully',
+      user
+    };
   } catch (error) {
+    if (error.code === 'ConditionalCheckFailedException') {
+      return {
+        success: false,
+        message: 'User already exists',
+      };
+    }
     console.error('Error adding user:', error);
     throw error;
   }
