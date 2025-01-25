@@ -9,16 +9,23 @@
   <nav class="navbar">
     <div class="navbar-container">
       <a href="/" class="navbar-brand">MyApp</a>
-      <ul class="navbar-menu">
-        <li><a href="/">Home</a></li>
-        <li><a href="/openai">OpenAI</a></li>
-        <li><a href="/energyTransmission">Energy</a></li>
-        <li><a href="/dropDown">Select Menu</a></li>
+      <ul class="navbar-menu"></ul>
+          <% if (typeof user !== 'undefined' && user) { %>
+            <li><a href="/openai">OpenAI</a></li>
+          <% } %>
+          <li><a href="/energyTransmission">Energy</a></li>
+          <li><a href="/dropDown">Select Menu</a></li>
       </ul>
-      <div class="share-buttons">
-        <!-- Share Buttons will go here -->
-      </div>
     </div>
+      <div class="auth-buttons">
+        <!-- Share Buttons will go here -->
+        <% if (typeof user !== 'undefined' && user) { %>
+          <span class="text-gray-700">Welcome, <%= user.displayName %></span>
+            <a href="/auth/logout">Logout</a>
+        <% } else { %>
+            <a href="/auth/login">Sign In</a>
+        <% } %>
+      </div>
   </nav>
 </body>
 </html>

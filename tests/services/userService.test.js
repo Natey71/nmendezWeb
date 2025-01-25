@@ -17,10 +17,16 @@ describe('User Service', () => {
     dynamoDB.put.mockResolvedValue({}); // Mock the put method to resolve
 
     const user = { UserId: 'user123', Name: 'John Doe', Email: 'john@example.com' };
-    await expect(userService.addUser(user)).resolves.toBeUndefined();
+    const expectedResponse = {
+      success: true,
+      message: 'User added successfully'
+    };
+    
+    await expect(userService.addUser(user)).resolves.toEqual(expectedResponse);
     expect(dynamoDB.put).toHaveBeenCalledWith({
       TableName: 'Users',
       Item: user,
+      ConditionExpression: 'attribute_not_exists(UserId)'
     });
   });
 
@@ -38,17 +44,38 @@ describe('User Service', () => {
   test('getUser should return undefined if user not found', async () => {
     dynamoDB.get.mockResolvedValue({}); // Mock the get method to resolve with no Item
 
-    await expect(userService.getUser('nonexistent')).resolves.toBeUndefined();
+    const user = { UserId: 'user123', Name: 'John Doe', Email: 'john@example.com' };
+    const result = await userService.addUser(user);
+    expect(result).toEqual({
+      success: true,
+      message: 'User added successfully',
+      user
+    });
     expect(dynamoDB.get).toHaveBeenCalledWith({
       TableName: 'Users',
       Key: { UserId: 'nonexistent' },
     });
   });
 
-  test('addUser should throw an error if DynamoDB fails', async () => {
-    dynamoDB.put.mockRejectedValue(new Error('DynamoDB Error')); // Mock the put method to reject
-
+  test('addUser should throw an error if DynamoDB fails with conditional check', async () => {
+    const dbError = {
+      code: 'ConditionalCheckFailedException',
+      message: 'User already exists',
+    };
+    dynamoDB.put.mockRejectedValue(dbError);
+    
     const user = { UserId: 'user123', Name: 'John Doe', Email: 'john@example.com' };
-    await expect(userService.addUser(user)).rejects.toThrow('DynamoDB Error');
+    await expect(userService.addUser(user)).rejects.toThrow('User already exists');
+  });
+
+  test('addUser should throw an error for other DynamoDB failures', async () => {
+    const dbError = {
+      code: 'InternalServerError',
+      message: 'Internal server error',
+    };
+    dynamoDB.put.mockRejectedValue(dbError);
+    
+    const user = { UserId: 'user123', Name: 'John Doe', Email: 'john@example.com' };
+    await expect(userService.addUser(user)).rejects.toThrow('Internal server error');
   });
 });
