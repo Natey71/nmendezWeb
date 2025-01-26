@@ -33,11 +33,11 @@ function OnSuccessTransmissionData(response){
   const hours = records.map(record => record.HourDK);
   const sharePPM = records.map(record => record.SharePPM);
   const shareMWh = records.map(record => record.ShareMWh);
-
     // Chart.js configuration
   const ctx = document.getElementById('myChart').getContext('2d');
   const myChart = new Chart(ctx, {
     type: 'line',
+    destroy: true,
     data: {
       labels: hours,
       datasets: [

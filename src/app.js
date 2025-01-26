@@ -59,12 +59,12 @@ app.use((req, res, next) => {
 });
 // Middleware for serving static files (CSS, JS)
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/scripts', express.static(path.join(__dirname, 'node_modules')));
+app.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 // Start server
-const PORT = dotenv.PORT;
+const PORT = process.env.PORT;
 console.log(PORT);
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

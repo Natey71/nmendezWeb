@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <title>Multiple Dropdown Examples</title>
-  <!-- Link to your custom CSS file -->
-  <link rel="stylesheet" href="/css/dropDown.css" />
-  <!-- ====== CSS Libraries ====== -->
-  <!-- Bootstrap (CSS) Called inside navbar and used in this page  -->
+  <!-- Tailwind CSS -->
+  <link href="/css/output.css" rel="stylesheet">
   <!-- jQuery UI CSS -->
   <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.0/themes/base/jquery-ui.css" />
   <!-- Chosen CSS -->
@@ -18,15 +16,16 @@
   <!-- TomSelect CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.css"/>
 </head>
-<body>
+<body class="bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 min-h-screen">
+
     <%- include('partials/navbar') %>
 
-  <h1>10 Different Dropdown Examples</h1>
+  <h1 class="text-3xl font-bold mb-8">10 Different Dropdown Examples</h1>
 
   <!-- 1. Plain HTML select -->
-  <div class="dropdown-example">
-    <h2>1. Plain HTML Select</h2>
-    <select>
+  <div class="dropdown-example mb-6">
+    <h2 class="text-xl font-semibold mb-2">1. Plain HTML Select</h2>
+    <select class="block w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
       <option value="">Select an option</option>
       <option value="Option1">Option 1</option>
       <option value="Option2">Option 2</option>
@@ -35,43 +34,51 @@
   </div>
 
   <!-- 2. Basic custom CSS-only dropdown -->
-  <div class="dropdown-example custom-dropdown-container">
-    <h2>2. Custom CSS-Only (Hover)</h2>
-    <div class="custom-dropdown">
-      <button class="custom-dropdown-btn">Hover to Select</button>
-      <div class="custom-dropdown-content">
-        <a href="#">Option 1</a>
-        <a href="#">Option 2</a>
-        <a href="#">Option 3</a>
+  <div class="dropdown-example custom-dropdown-container mb-6">
+    <h2 class="text-xl font-semibold mb-2">2. Custom CSS-Only (Hover)</h2>
+    <div class="relative inline-block text-left">
+      <button class="inline-flex justify-center w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none">
+        Hover to Select
+      </button>
+      <div class="absolute mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 hidden group-hover:block z-10">
+        <div class="py-1">
+          <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 1</a>
+          <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 2</a>
+          <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 3</a>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 3. Bootstrap dropdown -->
-  <div class="dropdown-example">
-    <h2>3. Bootstrap Dropdown</h2>
-    <div class="btn-group">
-      <button
-        class="btn btn-secondary dropdown-toggle"
-        type="button"
-        data-toggle="dropdown"
-        aria-haspopup="true"
-        aria-expanded="false"
-      >
-        Bootstrap Dropdown
-      </button>
-      <div class="dropdown-menu">
-        <a class="dropdown-item" href="#">Option 1</a>
-        <a class="dropdown-item" href="#">Option 2</a>
-        <a class="dropdown-item" href="#">Option 3</a>
+  <!-- 3. Tailwind CSS Dropdown (Replacing Bootstrap Dropdown) -->
+  <div class="dropdown-example mb-6">
+    <h2 class="text-xl font-semibold mb-2">3. Tailwind CSS Dropdown (Replaces Bootstrap Dropdown)</h2>
+    <div class="relative inline-block text-left">
+      <div>
+        <button type="button" class="inline-flex justify-center w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none" id="options-menu" aria-haspopup="true" aria-expanded="true">
+          Tailwind Dropdown
+          <!-- Heroicon name: solid/chevron-down -->
+          <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.292l3.71-4.06a.75.75 0 111.14.976l-4.25 4.65a.75.75 0 01-1.14 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Dropdown panel, show/hide based on dropdown state -->
+      <div class="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 hidden group-hover:block z-10" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+        <div class="py-1" role="none">
+          <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">Option 1</a>
+          <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">Option 2</a>
+          <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">Option 3</a>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- 4. jQuery UI (selectmenu) -->
-  <div class="dropdown-example">
-    <h2>4. jQuery UI Selectmenu</h2>
-    <select id="jquery-ui-dropdown">
+  <div class="dropdown-example mb-6">
+    <h2 class="text-xl font-semibold mb-2">4. jQuery UI Selectmenu</h2>
+    <select id="jquery-ui-dropdown" class="block w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 focus:outline-none">
       <option>Option 1</option>
       <option>Option 2</option>
       <option>Option 3</option>
@@ -79,9 +86,9 @@
   </div>
 
   <!-- 5. Chosen -->
-  <div class="dropdown-example">
-    <h2>5. Chosen Dropdown</h2>
-    <select class="chosen-select" style="width:200px;">
+  <div class="dropdown-example mb-6">
+    <h2 class="text-xl font-semibold mb-2">5. Chosen Dropdown</h2>
+    <select class="chosen-select block w-48 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 focus:outline-none">
       <option>Option 1</option>
       <option>Option 2</option>
       <option>Option 3</option>
@@ -89,9 +96,9 @@
   </div>
 
   <!-- 6. Select2 -->
-  <div class="dropdown-example">
-    <h2>6. Select2</h2>
-    <select class="select2-example" style="width:200px;">
+  <div class="dropdown-example mb-6">
+    <h2 class="text-xl font-semibold mb-2">6. Select2</h2>
+    <select class="select2-example block w-48 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 focus:outline-none">
       <option value="Option1">Option 1</option>
       <option value="Option2">Option 2</option>
       <option value="Option3">Option 3</option>
@@ -99,9 +106,9 @@
   </div>
 
   <!-- 7. SumoSelect -->
-  <div class="dropdown-example">
-    <h2>7. SumoSelect (Multiple)</h2>
-    <select class="sumoSelect" multiple>
+  <div class="dropdown-example mb-6">
+    <h2 class="text-xl font-semibold mb-2">7. SumoSelect (Multiple)</h2>
+    <select class="sumoSelect block w-64 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 focus:outline-none" multiple>
       <option>Option 1</option>
       <option>Option 2</option>
       <option>Option 3</option>
@@ -110,22 +117,30 @@
   </div>
 
   <!-- 8. Custom dropdown with pure JS -->
-  <div class="dropdown-example custom-dropdown-container">
-    <h2>8. Custom Dropdown (JavaScript Toggle)</h2>
-    <div class="js-dropdown">
-      <button class="js-dropdown-btn">Select an option</button>
-      <div class="js-dropdown-content">
-        <div class="js-dropdown-option">Option 1</div>
-        <div class="js-dropdown-option">Option 2</div>
-        <div class="js-dropdown-option">Option 3</div>
+  <div class="dropdown-example custom-dropdown-container mb-6">
+    <h2 class="text-xl font-semibold mb-2">8. Custom Dropdown (JavaScript Toggle)</h2>
+    <div class="relative inline-block text-left">
+      <button id="js-dropdown-btn" class="inline-flex justify-center w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none">
+        Select an option
+        <!-- Heroicon name: solid/chevron-down -->
+        <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.292l3.71-4.06a.75.75 0 111.14.976l-4.25 4.65a.75.75 0 01-1.14 0L5.21 8.27a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+        </svg>
+      </button>
+      <div id="js-dropdown-content" class="hidden origin-top-right absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-10">
+        <div class="py-1">
+          <div class="cursor-pointer block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 1</div>
+          <div class="cursor-pointer block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 2</div>
+          <div class="cursor-pointer block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 3</div>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- 9. TomSelect -->
-  <div class="dropdown-example">
-    <h2>9. TomSelect</h2>
-    <select id="tom-select" multiple placeholder="Pick a car...">
+  <div class="dropdown-example mb-6">
+    <h2 class="text-xl font-semibold mb-2">9. TomSelect</h2>
+    <select id="tom-select" multiple placeholder="Pick a car..." class="tom-select block w-64 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 focus:outline-none">
       <option value="audi">Audi</option>
       <option value="bmw">BMW</option>
       <option value="tesla">Tesla</option>
@@ -134,25 +149,29 @@
   </div>
 
   <!-- 10. Another custom CSS-only dropdown -->
-  <div class="dropdown-example custom-dropdown-container">
-    <h2>10. Another Custom CSS-Only (Hover)</h2>
-    <div class="custom-dropdown2">
-      <button class="custom-dropdown2-btn">Hover to Select</button>
-      <div class="custom-dropdown2-content">
-        <a href="#">Option 1</a>
-        <a href="#">Option 2</a>
-        <a href="#">Option 3</a>
+  <div class="dropdown-example custom-dropdown-container mb-6">
+    <h2 class="text-xl font-semibold mb-2">10. Another Custom CSS-Only (Hover)</h2>
+    <div class="relative inline-block text-left">
+      <button class="custom-dropdown2-btn inline-flex justify-center w-full rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none">
+        Hover to Select
+      </button>
+      <div class="custom-dropdown2-content absolute mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 hidden group-hover:block z-10">
+        <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 1</a>
+        <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 2</a>
+        <a href="#" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Option 3</a>
       </div>
     </div>
   </div>
+
+
   <!-- ====== JS Libraries ====== -->
   <!-- jQuery -->
-  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="/node_modules/jquery/dist/jquery.min.js"></script>
+  <!-- jQuery UI JS -->
+  <script src="https://code.jquery.com/ui/1.13.0/jquery-ui.js"></script>
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
   <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
-  <!-- jQuery UI JS -->
-  <script src="https://code.jquery.com/ui/1.13.0/jquery-ui.js"></script>
   <!-- Chosen JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chosen/1.8.7/chosen.jquery.min.js"></script>
   <!-- Select2 JS -->
@@ -161,7 +180,6 @@
   <script src="https://cdn.jsdelivr.net/npm/sumoselect@3.0.3/dist/jquery.sumoselect.min.js"></script>
   <!-- TomSelect JS -->
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
-
   <!-- ====== Custom JavaScript Initialization ====== -->
   <script>
     // jQuery UI (Selectmenu)
