@@ -6,6 +6,6 @@ const getData = async() => {
     return data;
 }
 
-module.exports = {
+export {
   getData,
 };

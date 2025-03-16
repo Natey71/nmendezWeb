@@ -1,9 +1,8 @@
 // dropDown.js
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const dropDown = require('../controllers/dropDownController');
 
 router.get('/dropDown', (req, res) => {
   res.render('dropDown', { response: null });
 });
-module.exports = router;
+export default router;

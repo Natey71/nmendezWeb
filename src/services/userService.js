@@ -44,4 +44,4 @@ const getUser = async (userId) => {
   }
 };
 
-module.exports = { addUser, getUser };
+export default { addUser, getUser };

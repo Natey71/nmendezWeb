@@ -1,22 +1,25 @@
-const express = require('express');
-const dotenv = require('dotenv').config();
-const path = require('path');
-const bodyParser = require('body-parser');
-const session = require('express-session');
-const authRoutes = require('./routes/authRoutes');
-const { isAuthenticated } = require('./middleware/auth');
+import { getSessionSecret } from './secrets.js';
+import express from 'express';
+import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import  bodyParser from 'body-parser';
+import session from 'express-session';
 // Initialize Express app
 // Set view engine to EJS (you can use Pug or just static HTML if preferred)
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+//dotenv.config();
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-
+// get secret
+const secret = await getSessionSecret();
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  secret: secret || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -25,17 +28,11 @@ app.use(session({
   }
 }));
 // Routes
-app.use('/auth', authRoutes);
-
-// Protected OpenAI route
-app.get('/openai', isAuthenticated, (req, res) => {
-  res.render('openai', { user: req.user });
-});
 // Use routes
-const homeRoutes = require('./routes/index');
-const openaiRoutes = require('./routes/openaiRoute');
-const energyTransmission = require('./routes/energyTransmissionRoute');
-const dropDown = require('./routes/dropDown');
+import homeRoutes from './routes/index.js';
+import openaiRoutes from './routes/openaiRoute.js';
+import energyTransmission from './routes/energyTransmissionRoute.js';
+import dropDown from './routes/dropDown.js';
 app.use('/', homeRoutes);
 app.use('/', openaiRoutes);
 app.use('/', energyTransmission);
@@ -55,9 +52,20 @@ app.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+
+async function startServer() {
+  try {
+
+  } catch (error) {
+    console.error("Failed to retrieve secret:", error);
+  }
+
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+  });
+}
+
+startServer();
+
 // Start server
-const PORT = process.env.PORT;
-console.log(PORT);
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});

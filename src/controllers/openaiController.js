@@ -1,10 +1,16 @@
 
-const { OpenAI } = require('openai');
+import { OpenAI } from 'openai';
+import { getOpenAISecret } from '../secrets.js';
 // Load environment variables
+const secret = await getOpenAISecret();
+const secObj = JSON.parse(secret);
+const org = secObj.ORG_KEY;
+const api = secObj.API_KEY;
+const proj = secObj.PROJ_KEY;
 const openai = new OpenAI({
-  organization: process.env.OPENAI_ORG_KEY,
-  apiKey: process.env.OEPNAI_API_KEY,
-  project: process.env.OPENAI_PROJ_KEY
+  organization: org,
+  apiKey: api,
+  project: proj 
 });
 
 const runPrompt = async(prompt) => {
@@ -24,6 +30,6 @@ const runPrompt = async(prompt) => {
 
 };
 
-module.exports = {
+export {
   runPrompt,
 };

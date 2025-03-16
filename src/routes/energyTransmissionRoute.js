@@ -1,8 +1,8 @@
 
 // routes/openaiRoute.js
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const energyTransmissionController = require('../controllers/energyTransmissionController');
+import { getData } from '../controllers/energyTransmissionController.js';
 
 // Render the form for user input
 router.get('/energyTransmission', (req, res) => {
@@ -14,11 +14,11 @@ router.get('/energyTransmission', (req, res) => {
 // Handle form submission and OpenAI API call
 router.post('/api/ConsumptionCoverageTransmission', async (req, res) => {
   try {
-    const response = await energyTransmissionController.getData();
+    const response = await getData();
     res.send(response);
   } catch (error) {
     res.status(500).send('Error generating response');
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,7 +1,7 @@
 // routes/openaiRoute.js
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const openaiController = require('../controllers/openaiController');
+import { runPrompt } from '../controllers/openaiController.js';
 
 // Render the form for user input
 router.get('/openai', (req, res) => {
@@ -12,11 +12,11 @@ router.get('/openai', (req, res) => {
 router.post('/api/prompt', async (req, res) => {
   const prompt = req.body.prompt;
   try {
-    const response = await openaiController.runPrompt(prompt);
+    const response = await runPrompt(prompt);
     res.send(response);
   } catch (error) {
     res.status(500).send('Error generating response');
   }
 });
 
-module.exports = router;
+export default router;

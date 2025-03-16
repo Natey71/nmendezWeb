@@ -1,8 +1,8 @@
 // homeRoutes.js
-const express = require('express');
+import express from 'express';
 const rtr = express.Router();
-const homeController = require('../controllers/index');
+import getHomePage from '../controllers/index.js';
 
-rtr.get('/', homeController.getHomePage);
+rtr.get('/', getHomePage);
 
-module.exports = rtr;
+export default rtr;
