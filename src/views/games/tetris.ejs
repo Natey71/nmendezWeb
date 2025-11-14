@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link href="/css/output.css" rel="stylesheet" />
+  </head>
+  <body class="bg-white dark:bg-gray-900 min-h-screen">
+    <%- include('../partials/navbar') %>
+
+    <main class="container mx-auto px-4 py-12">
+      <header class="max-w-3xl mx-auto text-center mb-10">
+        <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+          Tetris
+        </h1>
+        <p class="text-lg text-gray-700 dark:text-gray-300">
+          This page is ready for your Tetris implementation. Plug in your grid, controls, and scoring to recreate the classic experience.
+        </p>
+      </header>
+
+      <section class="max-w-4xl mx-auto space-y-6 text-gray-700 dark:text-gray-300">
+        <p>
+          Add your game board markup and any helper UI elements here. Consider a next-piece preview, score tracker, and level indicator.
+        </p>
+        <p>
+          When you're set to style and script the game, link to your CSS and JavaScript files to bring the falling blocks to life.
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="/js/tetris.js"></script>
+  </body>
+</html>

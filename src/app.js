@@ -19,7 +19,10 @@ app.use(express.json());
 // Routes
 // Use routes
 import homeRoutes from './routes/index.js';
+import gamesRoutes from './routes/games.js';
+
 app.use('/', homeRoutes);
+app.use('/games', gamesRoutes);
 // Middleware handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
