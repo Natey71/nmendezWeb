@@ -37,39 +37,14 @@
         <!-- Center: Navigation Links -->
         <div class="hidden sm:ml-6 sm:flex sm:space-x-8 items-center">
           <ul class="flex space-x-4">
-            <% if (typeof user !== 'undefined' && user) { %>
-              <li>
-                <a href="/openai" class="text-gray-800 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 px-3 py-2 rounded-md text-sm font-medium">
-                  OpenAI
-                </a>
-              </li>
-            <% } %>
             <li>
-              <a href="/energyTransmission" class="text-gray-800 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 px-3 py-2 rounded-md text-lg font-medium">
-                Energy
-              </a>
-            </li>
-            <li>
-              <a href="/dropDown" class="text-gray-800 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 px-3 py-2 rounded-md text-lg font-medium">
-                Select Menu
+              <a href="/Games" class="text-gray-800 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 px-3 py-2 rounded-md text-lg font-medium">
+                Games
               </a>
             </li>
           </ul>
         </div>
         
-        <!-- Right Side: Authentication Buttons -->
-        <div class="flex items-center">
-          <% if (typeof user !== 'undefined' && user) { %>
-            <span class="text-gray-700 dark:text-gray-300 mr-4">Welcome, <%= user.displayName %></span>
-            <a href="/auth/logout" class="text-gray-800 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 px-3 py-2 rounded-md text-sm font-medium">
-              Logout
-            </a>
-          <% } else { %>
-            <a href="/auth/login" class="text-gray-800 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 px-3 py-2 rounded-md text-sm font-medium">
-              Sign In
-            </a>
-          <% } %>
-        </div>
       </div>
     </div>
   </nav>

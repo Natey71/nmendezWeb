@@ -1,4 +1,3 @@
-import { getSessionSecret } from './secrets.js';
 import express from 'express';
 import 'dotenv/config';
 import path from 'path';
@@ -17,26 +16,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // get secret
-const secret = await getSessionSecret();
-app.use(session({
-  secret: secret || 'your-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'development',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
 // Routes
 // Use routes
 import homeRoutes from './routes/index.js';
-import openaiRoutes from './routes/openaiRoute.js';
-import energyTransmission from './routes/energyTransmissionRoute.js';
-import dropDown from './routes/dropDown.js';
 app.use('/', homeRoutes);
-app.use('/', openaiRoutes);
-app.use('/', energyTransmission);
-app.use('/', dropDown);
 // Middleware handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
