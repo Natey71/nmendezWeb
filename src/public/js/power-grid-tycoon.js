@@ -1,0 +1,1001 @@
+/* === Annotated copy (comments only; logic unchanged) ===
+   Generated: 2025-11-14T20:46:55
+   Notes:
+     - Comments were inserted above functions/classes/handlers/config/state.
+     - You can safely edit code; comments won't affect behavior.
+     - Search for 'SECTION' or 'Function' to jump around.
+*/
+
+(function(){
+  // ---------- Utilities ----------
+  const el = q => document.querySelector(q);
+// Function (arrow): els(q) — purpose: [describe].
+  const els = q => Array.from(document.querySelectorAll(q));
+// Function (arrow): fmt(n) — purpose: [describe].
+  const fmt = n => Math.round(n).toLocaleString();
+// Function (arrow): clamp(n, lo, hi) — purpose: [describe].
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+// Function (arrow): rand(a, b) — purpose: [describe].
+  const rand = (a, b) => a + Math.random()*(b-a);
+// Function (arrow): choice(arr) — purpose: [describe].
+  const choice = arr => arr[Math.floor(Math.random()*arr.length)];
+
+  // ---------- Elements ----------
+  const demandEl = el('#demand'), supplyEl = el('#supply'), balanceEl = el('#balance');
+  const freqEl = el('#freq'), priceEl = el('#price'), cashEl = el('#cash');
+  const repEl = el('#rep'), uptimeEl = el('#uptime');
+  const dLbl = el('#demandLbl'), sLbl = el('#supplyLbl'), dBar = el('#dBar'), sBar = el('#sBar');
+  const needle = el('#needle'), toast = el('#toast');
+  const historyCanvas = el('#history'), ctx = historyCanvas.getContext('2d');
+  const timerEl = el('#timer'), clockEl = el('#clock'), overloadBanner = el('#overloadBanner'), overloadPill = el('#overloadPill'), overloadRemainEl = el('#overloadRemain'), overloadReasonEl = el('#overloadReason');
+  const genList = el('#genList'), custList = el('#custList');
+  const buildTbody = el('#buildTable tbody'), buildQueueEl = el('#buildQueue');
+  const offersArea = el('#offersArea'), upgradesArea = el('#upgradesArea');
+
+  // ---------- Config ----------
+  const TICK_MS_BASE = 1000;
+  const SAFE_HZ_MIN = 58.5, SAFE_HZ_MAX = 61.5, TARGET_HZ = 60.0;
+  const DAY_SECONDS = 300;          // 5 real minutes = 24h in-game
+  const HISTORY_LEN = 60;           // seconds for chart
+
+  // Alterations per request
+  const RESERVE_PCT = 0.18;         // up to +18% oversupply allowed as reserve
+  const OVERLOAD_GRACE = 45;        // 45s grace to fix overload instead of instant stop
+
+// SECTION: Configuration object `DIFFICULTY` — tweak constants/knobs here
+  const DIFFICULTY = {
+    easy:   { noise: 3, mismatchHzFactor: 0.013, payoutMul: 1.0 },
+    normal: { noise: 6, mismatchHzFactor: 0.018, payoutMul: 1.0 },
+    hard:   { noise: 9, mismatchHzFactor: 0.026, payoutMul: 0.9 }
+  };
+
+  // Buildable definitions
+  const BLUEPRINTS = [
+    { key:'coal',  name:'Coal Unit',  fuel:'coal',  cap:60,  startup:3,  opex:55,  co2:900, buildTime:16, capex:35000 },
+    { key:'gas',   name:'Gas Turbine',fuel:'gas',   cap:20,  startup:2,  opex:70,  co2:450, buildTime:14, capex:18000 },
+    { key:'wind',  name:'Wind Farm',  fuel:'wind',  cap:30,  startup:0,  opex:5,   co2:0,   buildTime:12, capex:18000, variable:true },
+    { key:'solar', name:'Solar PV',   fuel:'solar', cap:25,  startup:0,  opex:4,   co2:0,   buildTime:10, capex:15000, variable:true },
+    { key:'nuclear', name:'Nuclear',  fuel:'nuclear', cap:120,startup:12,opex:25,  co2:0,   buildTime:30, capex:120000, locked:true, unlockNote:'Profits ≥ $150k' },
+    { key:'battery', name:'Battery',  fuel:'battery', cap:25, startup:0,  opex:6,  co2:0,   buildTime:12, capex:32000, isBattery:true, energyMax:1600, roundTrip:0.9 }
+  ];
+
+// SECTION: Data table/enum `UPGRADES` — list-like configuration
+  const UPGRADES = [
+    { id:'agc', name:'Auto-Dispatch (AGC)', desc:'Automatically toggles a gas unit to hold ±5 MW balance.', cost:20000, owned:false },
+    { id:'fore', name:'Forecast HUD', desc:'Shows next-hour demand and solar/wind forecast bands.', cost:8000, owned:false },
+    { id:'marketing', name:'Marketing', desc:'+10 Reputation cap and +15% offer rate.', cost:12000, owned:false }
+  ];
+
+  // ---------- Game State ----------
+  let running=false, timer=null, difficulty='normal', speed=1;
+  let t=0, day=0, secondsInDay=0;
+  let freq=TARGET_HZ, price=80, cash=250000, rep=50;
+  let totalDeliveredMWh=0, totalEmissionsT=0, totalOpex=0, totalRevenue=0, profit=0;
+  let uptimeTicks=0, ticks=0;
+  let history = [];
+
+  // overload grace state
+  let overloadActive=false, overloadRemain=0, overloadReason='';
+
+  // Entities
+  let generators = [];
+  let customers  = [];
+  let buildQueue = [];
+  let offers     = [];
+  let events     = []; // active timed events
+  let fuelMultipliers = { coal:1, gas:1 };
+
+  // ---------- Initialization ----------
+  function initGame(){
+    // Start assets (altered: start with four independent 10 MW gas turbines; max 40 MW total)
+      generators = [
+        makeGen('coal-1','Coal Unit','coal',60,3,55,900,false, /*on*/ true),
+        makeGen('wind-1','Wind Farm','wind',30,0,5,0,true,true),
+        makeGen('solar-1','Solar PV','solar',25,0,4,0,true,true),
+        makeGen('gas-1','Gas Turbine GT-1','gas',10,3,70,450,false),
+        makeGen('gas-2','Gas Turbine GT-2','gas',10,3,70,450,false),
+        makeGen('gas-3','Gas Turbine GT-3','gas',10,3,70,450,false),
+        makeGen('gas-4','Gas Turbine GT-4','gas',10,3,70,450,false),
+    ];
+
+    // Customers: homes, store, small DC (businesses can be turned off individually)
+    customers = [
+      makeCustomer('Homes — Oakview', 'residential-block', 35, 'evening-peaker', 1.2, true),
+      makeCustomer('Market Street Store', 'retail', 12, 'business-hours', 1.0, true),
+      makeCustomer('Tiny Datacenter', 'datacenter', 18, 'flat', 1.0, true),
+    ];
+
+    buildQueue = [];
+    offers = [];
+    events = [];
+    fuelMultipliers = { coal:1, gas:1 };
+
+    running=false; clearInterval(timer); timer=null;
+    t=0; day=1; secondsInDay=6*60; // start at 06:00
+    freq=TARGET_HZ; price=80; cash=250000; rep=50;
+    totalDeliveredMWh=0; totalEmissionsT=0; totalOpex=0; totalRevenue=0; profit=0;
+    uptimeTicks=0; ticks=0; history=[];
+    overloadActive=false; overloadRemain=0; overloadReason='';
+    els('.modal').forEach(m=>m.style.display='none');
+
+    renderGenList(); renderCustList(); renderBuildables(); renderUpgrades();
+    updateUI(0,0,0); drawHistory();
+    setButtons();
+    toastMsg('Ready. Build your grid.');
+  }
+
+// Function: setButtons() — purpose: [describe]. Returns: [value/void].
+  function setButtons(){
+    el('#startBtn').disabled = running;
+    el('#pauseBtn').disabled = !running;
+    el('#resetBtn').disabled = running && ticks<2 ? true : false;
+  }
+
+  // ---------- Entity Factories ----------
+  function makeGen(id,name,fuel,cap,startup,opex,co2,variable=false,on=false){
+    return {
+      id, name, fuel, cap, startup, opex, co2, variable, on, enabled:true, actual:0,
+      isBattery: fuel==='battery', // filled when built
+      energy:0, energyMax:0, roundTrip:1,
+      age:0, fault:false, maint:1.0, building:false
+    };
+  }
+// Function: makeBattery(id,name,power,energyMax,roundTrip) — purpose: [describe]. Returns: [value/void].
+  function makeBattery(id,name,power,energyMax,roundTrip){
+    const g = makeGen(id,name,'battery',power,0,6,0,false,true);
+    g.isBattery = true; g.energy = Math.round(energyMax*0.5); g.energyMax = energyMax; g.roundTrip = roundTrip||0.9;
+    return g;
+  }
+
+// Function: makeCustomer(name, klass, baseMW, profile, volatility=1.0, connected=true) — purpose: [describe]. Returns: [value/void].
+  function makeCustomer(name, klass, baseMW, profile, volatility=1.0, connected=true){
+    return { id: 'c-'+Math.random().toString(36).slice(2,8), name, klass, baseMW, profile, volatility, connected, priceAdj:1.0 };
+  }
+
+  // ---------- Rendering: Generators ----------
+  function renderGenList(){
+    genList.innerHTML='';
+    // Split gas vs. others for UI
+     const gasUnits = generators.filter(g=>g.fuel==='gas');
+     const others   = generators.filter(g=>g.fuel!=='gas');
+     // Render non-gas as individual rows (unchanged behavior)
+     for(const g of others){
+       const row = document.createElement('div');
+       row.className='row';
+       const tags = `<span class="tag">${g.fuel}</span>` + (g.variable?`<span class="tag">variable</span>`:'') + (g.isBattery?`<span class="tag">battery</span>`:'');
+       row.innerHTML = `
+         <div class="name">${g.name} ${tags} <div class="muted small">${g.isBattery?`Power ${g.cap} MW • Energy ${fmt(g.energy)}/${fmt(g.energyMax)}`:`Capacity ${g.cap} MW`}</div></div>
+         <div class="status">${g.fault?'<span class="bad">FAULT</span>':(g.enabled? (g.on?'Online':'OFF') : `Starting (${g._startRemain||g.startup}s)`)}</div>
+         <div class="status">Out: <strong id="${g.id}-out">0</strong> MW <span class="muted">| OPEX $${g.opex}</span></div>
+         <div class="right">
+           <label class="switch ${g.on?'on':''}" id="${g.id}-switch" aria-label="Toggle ${g.name}"><input type="checkbox" ${g.on?'checked':''}/><div class="knob"></div></label>
+         </div>`;
+       genList.appendChild(row);
+// UI: Event listener for 'click'
+       el(`#${g.id}-switch`).addEventListener('click', (e)=>{ e.preventDefault(); toggleGen(g.id); });
+     }
+     // Render gas fleet as a single row with 0–N selector
+     if(gasUnits.length){
+       renderGasFleet(gasUnits);
+     }
+   }
+// Function: renderGasFleet(gasUnits) — purpose: [describe]. Returns: [value/void].
+   function renderGasFleet(gasUnits){
+     const total = gasUnits.length;
+     const online = gasUnits.filter(g=>g.on && g.enabled && !g.fault).length;
+     const totalOut = gasUnits.reduce((s,g)=> s + Math.max(0,g.actual||0), 0);
+     const capEach = gasUnits[0]?.cap || 0;
+     const opexEach = gasUnits[0]?.opex || 0;
+     const row = document.createElement('div');
+     row.className = 'row';
+     row.innerHTML = `
+       <div class="name">Gas Turbines (Fleet)
+         <span class="tag">gas</span>
+         <div class="muted small">${total} × ${capEach} MW • Startup 3s</div>
+       </div>
+       <div class="status">Online: <strong id="gas-online">${online}</strong> / ${total}</div>
+       <div class="status">Out: <strong id="gas-out">${fmt(totalOut)}</strong> MW <span class="muted">| OPEX $${opexEach} each</span></div>
+       <div class="right">
+         <div class="tight small" id="gas-controls">
+           ${Array.from({length: total+1}, (_,n)=>`<button class="btn small" data-gas-n="${n}">${n}</button>`).join(' ')}
+         </div>
+       </div>`;
+     genList.appendChild(row);
+     // Wire 0–N buttons
+     row.querySelectorAll('[data-gas-n]').forEach(btn=>{
+// UI: Event listener for 'click'
+       btn.addEventListener('click', ()=>{
+         const n = Number(btn.getAttribute('data-gas-n'));
+         setGasFleet(gasUnits, n);
+       });
+     });
+   }
+// Function: setGasFleet(gasUnits, target) — purpose: [describe]. Returns: [value/void].
+    function setGasFleet(gasUnits, target){
+    // Count units that are ON and not faulted (includes those starting)
+    const active   = gasUnits.filter(g=>g.on && !g.fault);
+    const current  = active.length;
+
+    // Need to start more
+    if(target > current){
+      const toStart  = target - current;
+      const available = gasUnits.filter(g=>!g.on && !g.fault);
+      for(let i=0;i<toStart && i<available.length;i++){
+        toggleGen(available[i].id);
+      }
+      if(toStart > available.length){
+        toastMsg('Not enough healthy gas units to meet target.');
+      }
+    }
+
+    // Need to stop some (prefer stopping those still starting)
+    if(target < current){
+      const toStop   = current - target;
+      const starting = active.filter(g=>!g.enabled); // on but still starting
+      const running  = active.filter(g=> g.enabled); // fully online
+      const stopList = [...starting, ...running];
+      for(let i=0;i<toStop && i<stopList.length;i++){
+        toggleGen(stopList[i].id);
+      }
+    }
+    updateGasFleetUI?.();
+  }
+// Function: toggleGen(id) — purpose: [describe]. Returns: [value/void].
+  function toggleGen(id){
+    const g = generators.find(x=>x.id===id); if(!g) return; // allow toggling during faults; output remains 0 until repaired
+    if(g.isBattery){ g.on = !g.on; updateSwitchUI(g); return; }
+      const turningOn = !g.on;
+    g.on = turningOn; updateSwitchUI(g);
+
+    // If turning OFF, cancel any pending startup and clean state
+    if(!turningOn){
+      if(g._startTimer){ clearInterval(g._startTimer); g._startTimer = null; }
+      g._startRemain = 0; g.enabled = true;
+      updateStatus(g,'OFF');
+      return;
+    }
+
+    if(g.startup>0){
+      g.enabled=false; g._startRemain = g.startup; updateStatus(g,`Starting (${g._startRemain}s)`);
+// Timer: setInterval — periodic task
+      g._startTimer = setInterval(()=>{
+        // Abort if player turned it OFF during startup
+        if(!g.on){ clearInterval(g._startTimer); g._startTimer=null; g._startRemain=0; return; }
+        g._startRemain--;
+        updateStatus(g, g._startRemain>0?`Starting (${g._startRemain}s)`:'Online');
+        if(g._startRemain<=0){
+          clearInterval(g._startTimer); g._startTimer=null;
+          g.enabled=true; g._startRemain=0;
+        }
+      }, 1000/Math.max(1,speed));
+    }else{
+      g.enabled=true; updateStatus(g,'Online');
+    }
+  }
+// Function: updateSwitchUI(g) — purpose: [describe]. Returns: [value/void].
+  function updateSwitchUI(g){
+    const sw = el(`#${g.id}-switch`); if(!sw) return;
+    sw.classList.toggle('on', !!g.on);
+    const input = sw.querySelector('input'); if(input) input.checked = !!g.on;
+  }
+// Function: updateStatus(g, text) — purpose: [describe]. Returns: [value/void].
+  function updateStatus(g, text){ const s = el(`#${g.id}-out`)?.parentElement?.previousElementSibling; if(s) s.innerHTML = text; }
+
+  // ---------- Rendering: Customers ----------
+  function renderCustList(){
+    custList.innerHTML='';
+    for(const c of customers){
+      const row = document.createElement('div');
+      row.className='row';
+      row.innerHTML = `
+        <div class="name">${c.name} <span class="tag">${c.klass.replace('-',' ')}</span><div class="muted small">Contract ${fmt(c.baseMW)} MW • Profile ${c.profile}</div></div>
+        <div class="status">Status: ${c.connected?'<span class="good">Connected</span>':'<span class="warn">Disconnected</span>'}</div>
+        <div class="status">Load: <strong id="${c.id}-d">0</strong> MW</div>
+        <div class="right">
+          <label class="switch ${c.connected?'on':''}" id="${c.id}-switch" aria-label="Connect ${c.name}"><input type="checkbox" ${c.connected?'checked':''}/><div class="knob"></div></label>
+        </div>`;
+      custList.appendChild(row);
+// UI: Event listener for 'click'
+      el(`#${c.id}-switch`).addEventListener('click', (e)=>{ e.preventDefault(); c.connected=!c.connected; updateCustSwitch(c); });
+    }
+  }
+// Function: updateCustSwitch(c) — purpose: [describe]. Returns: [value/void].
+  function updateCustSwitch(c){
+    const sw = el(`#${c.id}-switch`); if(!sw) return;
+    sw.classList.toggle('on', !!c.connected);
+    const input=sw.querySelector('input'); if(input) input.checked = !!c.connected;
+    // minor rep effect for disconnects
+    rep = clamp(rep + (c.connected? +1 : -2), 0, 110);
+  }
+
+  // ---------- Buildables / Upgrades ----------
+  function renderBuildables(){
+    buildTbody.innerHTML='';
+    for(const bp of BLUEPRINTS){
+      const locked = bp.locked && !(profit>=150000);
+      const tr = document.createElement('tr');
+      tr.className = locked?'ghost':'';
+      tr.innerHTML = `
+        <td>${bp.name} ${bp.variable?'<span class="tag">variable</span>':''}${bp.isBattery?'<span class="tag">battery</span>':''}</td>
+        <td>${bp.cap} MW</td>
+        <td>${bp.startup}s</td>
+        <td>$${bp.opex}</td>
+        <td>${bp.co2} t/GWh</td>
+        <td>${bp.buildTime}s</td>
+        <td>$${fmt(bp.capex)}</td>
+        <td class="right">${locked?`<span class="muted small">${bp.unlockNote}</span>`:`<button class="btn small" data-build="${bp.key}">Build</button>`}</td>
+      `;
+      buildTbody.appendChild(tr);
+    }
+    buildTbody.querySelectorAll('[data-build]').forEach(btn=>{
+// UI: Event listener for 'click'
+      btn.addEventListener('click', ()=>{
+        const key = btn.getAttribute('data-build');
+        const bp = BLUEPRINTS.find(b=>b.key===key); if(!bp) return;
+        if(cash < bp.capex){ toastMsg('Not enough cash.'); return; }
+        cash -= bp.capex;
+        const task = { id:'b-'+Math.random().toString(36).slice(2,8), bpKey:key, name:bp.name, remain:bp.buildTime, total:bp.buildTime };
+        buildQueue.push(task); renderQueue();
+        toastMsg(`Construction started: ${bp.name}.`);
+      });
+    });
+    renderQueue();
+  }
+// Function: renderQueue() — purpose: [describe]. Returns: [value/void].
+  function renderQueue(){
+    buildQueueEl.innerHTML='';
+    if(buildQueue.length===0){ buildQueueEl.innerHTML = '<div class="muted small">Nothing under construction.</div>'; return; }
+    for(const q of buildQueue){
+      const wrap = document.createElement('div');
+      wrap.style.marginBottom='8px';
+      wrap.innerHTML = `<div class="tight small"><strong>${q.name}</strong><span class="muted"> ${q.remain}s left</span></div>
+                        <div class="progress"><div style="width:${(100*(q.total-q.remain)/q.total).toFixed(1)}%"></div></div>`;
+      buildQueueEl.appendChild(wrap);
+    }
+  }
+
+// Function: renderUpgrades() — purpose: [describe]. Returns: [value/void].
+  function renderUpgrades(){
+    upgradesArea.innerHTML='';
+    for(const up of UPGRADES){
+      const owned = !!up.owned;
+      const row = document.createElement('div');
+      row.className='row';
+      row.innerHTML = `
+        <div class="name">${up.name}<div class="muted small">${up.desc}</div></div>
+        <div class="status">${owned?'<span class="good">Owned</span>':`$${fmt(up.cost)}`}</div>
+        <div></div>
+        <div class="right">${owned?'<span class="pill">✔</span>':`<button class="btn small" data-up="${up.id}">Buy</button>`}</div>`;
+      upgradesArea.appendChild(row);
+    }
+    upgradesArea.querySelectorAll('[data-up]').forEach(btn=>{
+// UI: Event listener for 'click'
+      btn.addEventListener('click', ()=>{
+        const id = btn.getAttribute('data-up');
+        const up = UPGRADES.find(u=>u.id===id); if(!up || up.owned) return;
+        if(cash<up.cost){ toastMsg('Not enough cash.'); return; }
+        cash -= up.cost; up.owned=true; renderUpgrades();
+        toastMsg(`${up.name} purchased.`);
+      });
+    });
+  }
+
+  // ---------- Demand Model ----------
+  function demandOfCustomer(c, sec){
+    const h = (sec % DAY_SECONDS) / DAY_SECONDS * 24; // hour 0..24
+    let shape=1;
+    switch(c.profile){
+      case 'evening-peaker': // homes
+        shape = 0.65 + 0.55*peak(h, 18, 22) + 0.25*peak(h,6,8);
+        break;
+      case 'business-hours': // store/office
+        shape = 0.3 + 0.9*peak(h,9,18);
+        break;
+      case 'flat': // datacenter
+        shape = 1.0;
+        break;
+      case 'factory':
+        shape = 0.6 + 0.5*peak(h,7,19);
+        break;
+      case 'town':
+        shape = 0.55 + 0.65*peak(h,18,23) + 0.15*peak(h,6,8);
+        break;
+      default: shape=1.0;
+    }
+    const noise = rand(-0.06,0.06) * DIFFICULTY[difficulty].noise/6;
+    let mw = c.baseMW * shape * c.volatility * (1+noise) * (c.connected?1:0);
+    mw = clamp(mw, 0, c.baseMW*1.8);
+    return mw;
+  }
+// Function: peak(hour, start, end) — purpose: [describe]. Returns: [value/void].
+  function peak(hour, start, end){
+    if(end<start) end+=24;
+    const inWindow = (hour>=start && hour<=end) || (hour+24>=start && hour+24<=end);
+    if(!inWindow) return 0;
+    const mid = (start+end)/2;
+    const width = (end-start)/2;
+    const x = Math.abs((hour-mid));
+    return clamp(1 - x/width, 0, 1);
+  }
+
+  // ---------- Renewable Output ----------
+  function updateRenewables(sec){
+    for(const g of generators){
+      if(g.variable){
+        if(g.fuel==='wind'){
+          if(g.on){
+            const drift = rand(-5,5);
+            g.actual = clamp((g.actual||rand(8,18))+drift, 5, g.cap);
+          }else g.actual=0;
+        }
+        if(g.fuel==='solar'){
+          if(g.on){
+            const cyc = Math.sin((sec/DAY_SECONDS)*Math.PI*2 - Math.PI/2);
+            const day = Math.max(0, cyc);
+            const cloud = 0.85 + (Math.random()*0.3 - 0.15); // 0.7—1.0
+            g.actual = Math.round(g.cap * day * cloud);
+          }else g.actual=0;
+        }
+      }
+    }
+  }
+
+  // ---------- Thermal / Battery Output ----------
+  function updateThermalAndBattery(){
+    for(const g of generators){
+      if(g.isBattery) continue;
+      if(g.fuel!=='wind' && g.fuel!=='solar'){
+        if(g.on && g.enabled && !g.fault) g.actual = g.cap; else g.actual = 0;
+      }
+    }
+  }
+
+// Function: batteryDispatch(balance) — purpose: [describe]. Returns: [value/void].
+  function batteryDispatch(balance){
+    // positive balance means surplus supply; negative means deficit
+    const batts = generators.filter(g=>g.isBattery && g.on);
+    let adjust = 0;
+    for(const b of batts){
+      const canDis = Math.min(b.cap, b.energy);       // MW limited by stored units (1 unit ~ 1 MW·s)
+      const canChg = Math.min(b.cap, b.energyMax - b.energy);
+      if(balance< -1){ // deficit -> discharge
+        const need = Math.min(-balance, canDis);
+        b.actual = need; b.energy -= need; adjust += need;
+      } else if(balance> 1){ // surplus -> charge
+        const room = Math.min(balance, canChg);
+        const take = room * b.roundTrip; // charge loss represented by storing less
+        b.actual = -room; b.energy += take; adjust -= room;
+      } else { b.actual = 0; }
+    }
+    return adjust; // MW added to supply (negative means charging)
+  }
+
+  // ---------- Market Price ----------
+  function computePrice(demand, supply){
+    const scarcity = clamp((demand - supply)/Math.max(1,demand), -0.6, 1.2); // -60% to +120%
+    const base = 70;
+    const fuel = 8*(fuelMultipliers.coal-1) + 12*(fuelMultipliers.gas-1);
+    const noise = rand(-6,6);
+    let p = base + 90*scarcity + noise + fuel;
+    p = clamp(p, 25, 380);
+    return Math.round(p);
+  }
+
+  // ---------- Offers / Names ----------
+  function maybeOffer(){
+    const rate = 0.05 * (UPGRADES.find(u=>u.id==='marketing')?.owned?1.15:1); // base probability per 5s block
+    if(t%5!==0) return;
+    const chance = rate * (0.5 + rep/120);
+    if(Math.random() < chance){
+      const o = makeOffer();
+      offers.push(o);
+      toastMsg(`New contract offer: ${o.name} (${o.baseMW} MW)`);
+    }
+  }
+// Function: makeOffer() — purpose: [describe]. Returns: [value/void].
+  function makeOffer(){
+    const types = [
+      { klass:'office', base:[8,20], profile:'business-hours' },
+      { klass:'factory', base:[15,35], profile:'factory' },
+      { klass:'datacenter', base:[12,30], profile:'flat' },
+      { klass:'town', base:[25,60], profile:'town' },
+      { klass:'retail', base:[6,16], profile:'business-hours' },
+      { klass:'residential-block', base:[12,28], profile:'evening-peaker' }
+    ];
+    const t = choice(types);
+    const mw = Math.round(rand(t.base[0], t.base[1]));
+    const name = genName(t.klass);
+    return { id:'o-'+Math.random().toString(36).slice(2,8), name, klass:t.klass, baseMW:mw, profile:t.profile, volatility:1.0, bonus: Math.round(rand(0,10)) };
+  }
+// Function: genName(klass) — purpose: [describe]. Returns: [value/void].
+  function genName(klass){
+    const cities = ['Riverton','Northfield','Pinecrest','Silver Run','Clearwater','Stonehaven','Lakeside','Maple Heights','Brookvale','Westford'];
+    const inds   = ['Alpha','Nova','Apex','Zenith','Atlas','Nimbus','Vertex','Quantum','Cobalt','Orchid'];
+    switch(klass){
+      case 'datacenter': return `${inds[Math.floor(Math.random()*inds.length)]} Cloud Node`;
+      case 'factory': return `${inds[Math.floor(Math.random()*inds.length)]} Components Plant`;
+      case 'office': return `${inds[Math.floor(Math.random()*inds.length)]} Offices`;
+      case 'town': return `${cities[Math.floor(Math.random()*cities.length)]} Township`;
+      case 'retail': return `${cities[Math.floor(Math.random()*cities.length)]} Plaza`;
+      default: return `${cities[Math.floor(Math.random()*cities.length)]} Homes`;
+    }
+  }
+// Function: renderOffers() — purpose: [describe]. Returns: [value/void].
+  function renderOffers(){
+    offersArea.innerHTML='';
+    if(offers.length===0){ offersArea.innerHTML='<div class="muted small">No pending offers.</div>'; return; }
+    for(const o of offers){
+      const row = document.createElement('div');
+      row.className='row';
+      row.innerHTML = `
+        <div class="name">${o.name} <span class="tag">${o.klass}</span><div class="muted small">Contract ${o.baseMW} MW • Profile ${o.profile}</div></div>
+        <div class="status">Reputation bonus: +${o.bonus}</div>
+        <div></div>
+        <div class="right">
+          <button class="btn small" data-accept="${o.id}">Accept</button>
+          <button class="btn small" data-reject="${o.id}">Reject</button>
+        </div>`;
+      offersArea.appendChild(row);
+    }
+    offersArea.querySelectorAll('[data-accept]').forEach(btn=>{
+// UI: Event listener for 'click'
+      btn.addEventListener('click', ()=>{
+        const id = btn.getAttribute('data-accept');
+        const o = offers.find(x=>x.id===id); if(!o) return;
+        customers.push(makeCustomer(o.name,o.klass,o.baseMW,o.profile,1.0,true));
+        rep = clamp(rep + o.bonus, 0, 110);
+        offers = offers.filter(x=>x.id!==id);
+        renderCustList(); renderOffers();
+        toastMsg(`Contract accepted: ${o.name} (+${o.baseMW} MW)`);
+      });
+    });
+    offersArea.querySelectorAll('[data-reject]').forEach(btn=>{
+// UI: Event listener for 'click'
+      btn.addEventListener('click', ()=>{
+        const id = btn.getAttribute('data-reject');
+        const o = offers.find(x=>x.id===id); if(!o) return;
+        rep = clamp(rep - 2, 0, 110);
+        offers = offers.filter(x=>x.id!==id);
+        renderOffers(); toastMsg(`Offer rejected: ${o.name}`);
+      });
+    });
+  }
+
+  // ---------- Random Events ----------
+  function maybeEvent(){
+    if(t%30!==0) return; // check periodically
+    if(Math.random()<0.35){
+      const ev = choice(['storm','trip','fuel-spike','heatwave']);
+      switch(ev){
+        case 'storm': startEvent({type:'storm', secs:rand(10,20)|0, effect:()=>{}}); break;
+        case 'trip':  startEvent({type:'trip', secs:rand(6,12)|0}); break;
+        case 'fuel-spike': startEvent({type:'fuel', secs:rand(15,25)|0, fuel: choice(['gas','coal'])}); break;
+        case 'heatwave': startEvent({type:'heat', secs:rand(10,18)|0}); break;
+      }
+    }
+  }
+// Function: startEvent(e) — purpose: [describe]. Returns: [value/void].
+  function startEvent(e){
+    e.endAt = t + e.secs; events.push(e);
+    if(e.type==='storm'){ toastMsg('Storm front: wind & solar output reduced.'); }
+      if(e.type === 'trip'){
+        const cand = generators.filter(g=>!g.variable  && !g.isBattery && g.on && !g.fault && g.fuel!=='coal');
+      if(cand.length){
+        const g = choice(cand);
+        g.fault = true;
+        g.on    = false;     // take it truly offline so fleet math is correct
+        g.enabled = true;    // clear any startup state
+        updateSwitchUI(g);
+        e.genId = g.id; toastMsg(`Unit trip: ${g.name} offline.`);
+      }
+    }
+    if(e.type==='fuel'){ fuelMultipliers[e.fuel] = 1.35; toastMsg(`${e.fuel.toUpperCase()} fuel spike: OPEX up.`); }
+    if(e.type==='heat'){ toastMsg('Heat wave: residential & commercial demand up.'); }
+  }
+// Function: applyEventEffects(demand) — purpose: [describe]. Returns: [value/void].
+  function applyEventEffects(demand){
+    let d = demand;
+    for(const ev of events){
+      if(ev.type==='storm'){
+        for(const g of generators){
+          if(g.fuel==='wind') g.actual = Math.round(g.actual*0.55);
+          if(g.fuel==='solar') g.actual = Math.round(g.actual*0.7);
+        }
+      }
+      if(ev.type==='heat'){
+        d *= 1.08;
+      }
+    }
+    return d;
+  }
+// Function: cleanupEvents() — purpose: [describe]. Returns: [value/void].
+  function cleanupEvents(){
+    events = events.filter(e=>{
+      if(t>=e.endAt){
+        if(e.type==='trip'){
+          const g = generators.find(x=>x.id===e.genId);
+          if(g){ g.fault=false; updateSwitchUI(g); toastMsg(`Unit restored: ${g.name}.`); }
+        }
+        if(e.type==='fuel'){ fuelMultipliers[e.fuel]=1; toastMsg('Fuel markets normalized.'); }
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // ---------- Overload / Warning ----------
+  function setOverload(active, reason){
+    overloadActive = active;
+    overloadReason = reason||overloadReason;
+    if(active && overloadRemain<=0){ overloadRemain = OVERLOAD_GRACE; }
+    if(overloadBanner) overloadBanner.style.display = active ? 'block' : 'none';
+    if(overloadPill) overloadPill.style.display = 'none';
+    if(active){
+      if(overloadRemainEl) overloadRemainEl.textContent = overloadRemain;
+      if(typeof overloadReasonEl !== 'undefined' && overloadReasonEl) overloadReasonEl.textContent = overloadReason;
+    }
+  }
+// Function: tickOverloadCountdown(unsafe) — purpose: [describe]. Returns: [value/void].
+  function tickOverloadCountdown(unsafe){
+    if(unsafe){
+      if(!overloadActive) setOverload(true, 'Unsafe operation');
+      else {
+        overloadRemain = Math.max(0, overloadRemain-1);
+        overloadRemainEl.textContent = overloadRemain;
+        if(overloadRemain<=0){
+          endGame(false, `Blackout — ${overloadReason}`);
+        }
+      }
+    }else if(overloadActive){
+      // recovered to safe state, cancel warning
+      setOverload(false,'');
+    }
+  }
+
+  // ---------- Main Tick ----------
+  function tick(){
+    ticks++; secondsInDay = (secondsInDay+1) % DAY_SECONDS; if(secondsInDay===0) day++;
+    updateClock();
+    // 1) Demand
+    let demand = 0;
+    for(const c of customers){
+      const mw = demandOfCustomer(c, secondsInDay);
+      const dEl = el(`#${c.id}-d`); if(dEl) dEl.textContent = fmt(mw);
+      demand += mw;
+    }
+    demand = Math.round(demand);
+
+    // 2) Generation
+    updateRenewables(secondsInDay);
+    updateThermalAndBattery();
+
+    // Supply before battery
+    let supply = generators.reduce((s,g)=> s + Math.max(0,g.actual||0), 0);
+    // Battery reacts
+    const adjusted = batteryDispatch(supply - demand);
+    supply += adjusted;
+
+    // Apply event effects (may modify renewable output and demand)
+    demand = Math.round(applyEventEffects(demand));
+
+    // 3) Frequency dynamics with reserve band
+    const reserveMW = Math.round(demand * RESERVE_PCT);
+    const rawBalance = supply - demand;
+    const oversupply = Math.max(0, rawBalance);
+    const effectiveBalance = oversupply>0 ? Math.max(0, oversupply - reserveMW) : rawBalance; // ignore reserve oversupply
+    const df = effectiveBalance * DIFFICULTY[difficulty].mismatchHzFactor;
+    const relax = (TARGET_HZ - freq) * 0.06;
+    freq = clamp(freq + df + relax, 57.0, 63.0);
+
+    // 4) Market & Economy
+    price = computePrice(demand, supply);
+    const delivered = Math.max(0, Math.min(supply, demand)); // MW served
+    const tickHours = 1/3600 * speed; // 1-second ticks scaled by speed
+    const revenue = delivered * price * tickHours * DIFFICULTY[difficulty].payoutMul;
+
+    // OPEX and emissions
+    let opex = 0, emissions = 0;
+    for(const g of generators){
+      if(g.isBattery){
+        if(Math.abs(g.actual)>0) opex += g.opex*0.5;
+      }else if(g.on && (g.enabled||g.variable) && !g.fault){
+        const mult = fuelMultipliers[g.fuel]||1;
+        if((g.actual||0)>0 || g.variable) opex += g.opex * mult;
+        emissions += (g.co2/1000) * (Math.max(0,g.actual) * tickHours);
+      }
+    }
+    const installedCap = generators.filter(g=>!g.isBattery).reduce((s,g)=>s+g.cap,0);
+    const targetCap = Math.max(80, 1.4 * (demand||80));
+    const maint = installedCap>targetCap ? (installedCap-targetCap) * 0.6 : 0;
+    opex += maint;
+
+    totalOpex += opex;
+    totalEmissionsT += emissions;
+    totalDeliveredMWh += delivered * tickHours;
+
+    cash += (revenue - opex);
+    totalRevenue += revenue;
+    profit = totalRevenue - totalOpex;
+
+    // 5) Reputation / uptime
+    if(delivered>=demand-0.1){ uptimeTicks++; rep = clamp(rep + 0.04, 0, 110); }
+    else rep = clamp(rep - 0.15, 0, 110);
+
+    // 6) Safety / overload (replace instant stop with 45s warning window)
+    const deficit = demand - supply;
+    const oversupplyBeyondReserve = Math.max(0, oversupply - reserveMW);
+    const unsafe = (freq<SAFE_HZ_MIN || freq>SAFE_HZ_MAX || deficit>0 || oversupplyBeyondReserve>0);
+    if(unsafe){
+      const reason = freq<SAFE_HZ_MIN||freq>SAFE_HZ_MAX ? `frequency ${freq.toFixed(2)} Hz` :
+                     (deficit>0 ? 'prolonged deficit' : 'excess oversupply beyond reserve');
+      setOverload(true, reason);
+    }
+    tickOverloadCountdown(unsafe);
+
+    // 7) Autopilot (AGC)
+    if(UPGRADES.find(u=>u.id==='agc')?.owned){
+      const g = generators.find(x=>x.fuel==='gas' && !x.fault);
+      if(g){
+        if((supply - demand) < -7 && !g.on) toggleGen(g.id);
+        if((supply - demand) > 6 && g.on) toggleGen(g.id);
+      }
+    }
+
+    // 8) Timers
+    updateBuildQueue();
+    maybeOffer();
+    maybeEvent();
+    cleanupEvents();
+
+    // 9) UI
+    updateUI(demand, supply, rawBalance);
+    pushHistory(demand, supply, rawBalance, freq);
+    drawHistory();
+  }
+
+// Function: updateBuildQueue() — purpose: [describe]. Returns: [value/void].
+  function updateBuildQueue(){
+    for(const q of buildQueue){ q.remain = Math.max(0, q.remain-1); }
+    const done = buildQueue.filter(q=>q.remain<=0);
+    if(done.length){
+      for(const q of done){
+        const bp = BLUEPRINTS.find(b=>b.key===q.bpKey);
+        if(bp.isBattery){
+          const b = makeBattery('bat-'+Math.random().toString(36).slice(2,7), 'Battery', bp.cap, bp.energyMax, bp.roundTrip);
+          generators.push(b);
+        }else{
+          const id = bp.key+'-'+Math.random().toString(36).slice(2,7);
+          const g = makeGen(id, bp.name, bp.fuel, bp.cap, bp.startup, bp.opex, bp.co2, !!bp.variable, (bp.fuel==='wind'||bp.fuel==='solar'));
+          generators.push(g);
+        }
+        toastMsg(`${q.name} commissioned.`);
+      }
+      buildQueue = buildQueue.filter(q=>q.remain>0);
+      renderQueue(); renderGenList();
+    }else if(t%1===0){ renderQueue(); }
+  }
+
+  // ---------- UI ----------
+  function updateUI(demand, supply, balance){
+    demandEl.textContent = fmt(demand);
+    supplyEl.textContent = fmt(supply);
+    const reserveMW = Math.round(demand * RESERVE_PCT);
+    const reserveText = (balance>0 && balance<=reserveMW) ? ' (reserve)' : '';
+    balanceEl.textContent = (balance>0?'+':'') + fmt(balance) + reserveText;
+    freqEl.textContent = freq.toFixed(2);
+    priceEl.textContent = fmt(price);
+    cashEl.textContent = fmt(cash);
+    repEl.textContent = Math.round(rep);
+    uptimeEl.textContent = ticks? Math.round(100*uptimeTicks/ticks):0;
+
+    dLbl.textContent = fmt(demand)+' MW';
+    sLbl.textContent = fmt(supply)+' MW';
+    dBar.style.width = Math.min(100, demand/1.6) + '%';
+    sBar.style.width = Math.min(100, supply/1.6) + '%';
+
+    // update asset outputs and battery state
+    for(const g of generators){
+      const out = el(`#${g.id}-out`);
+      if(out){
+        if(g.isBattery){
+          out.textContent = (g.actual>0? '+' : (g.actual<0? '' : '')) + fmt(g.actual);
+        }else{
+          out.textContent = fmt(Math.max(0,g.actual||0));
+        }
+      }
+    }
+
+    // needle uses raw balance
+    const ang = clamp((balance/50)*70, -80, 80);
+    needle.style.transform = `rotate(${ang}deg)`;
+
+    // buttons
+    setButtons();
+    updateGasFleetUI?.();
+  }
+// Function: updateGasFleetUI() — purpose: [describe]. Returns: [value/void].
+function updateGasFleetUI(){
+  const gasUnits = generators.filter(g=>g.fuel==='gas');
+  if(!gasUnits.length) return;
+  const online = gasUnits.filter(g=>g.on && g.enabled && !g.fault).length;
+  const totalOut = gasUnits.reduce((s,g)=> s + Math.max(0,g.actual||0), 0);
+  const onEl = el('#gas-online'); if(onEl) onEl.textContent = online;
+  const outEl = el('#gas-out');   if(outEl) outEl.textContent = fmt(totalOut);
+}
+// Function: updateClock() — purpose: [describe]. Returns: [value/void].
+  function updateClock(){
+    const hourFloat = secondsInDay / DAY_SECONDS * 24;
+    const hh = Math.floor(hourFloat);
+    const mm = Math.floor((hourFloat - hh)*60);
+// Function (arrow): pad(n) — purpose: [describe].
+    const pad = n => n.toString().padStart(2,'0');
+    clockEl.textContent = `Day ${day} — ${pad(hh)}:${pad(mm)}`;
+    timerEl.textContent = 'Sandbox';
+  }
+
+// Function: pushHistory(demand, supply, balance, freq) — purpose: [describe]. Returns: [value/void].
+  function pushHistory(demand, supply, balance, freq){
+    history.push({demand,supply,balance,freq});
+    while(history.length>HISTORY_LEN) history.shift();
+  }
+// Function: drawHistory() — purpose: [describe]. Returns: [value/void].
+  function drawHistory(){
+    const W = historyCanvas.width, H = historyCanvas.height;
+    ctx.clearRect(0,0,W,H);
+    ctx.save(); ctx.translate(0,0);
+    // grid
+    ctx.globalAlpha = 0.15; ctx.strokeStyle = '#7aa1ff'; ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let i=0;i<=6;i++){ const y=i*H/6; ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    ctx.stroke(); ctx.globalAlpha=1;
+
+    // scale
+    const maxDemand = Math.max(100, ...history.map(h=>h.demand));
+    const maxSupply = Math.max(100, ...history.map(h=>h.supply));
+    const maxVal = Math.max(maxDemand, maxSupply, 150);
+
+// Function: pathFor(key) — purpose: [describe]. Returns: [value/void].
+    function pathFor(key){
+      ctx.beginPath();
+      history.forEach((h,i)=>{
+        const x = i/(HISTORY_LEN-1)*W;
+        const y = H - (h[key]/maxVal)*H;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+    }
+    // Demand (line)
+    ctx.strokeStyle = '#6ee7ff'; pathFor('demand'); ctx.stroke();
+    // Supply (line)
+    ctx.strokeStyle = '#7afabf'; pathFor('supply'); ctx.stroke();
+
+    // Frequency dots
+    ctx.fillStyle='#ffd166';
+    history.forEach((h,i)=>{
+      const x = i/(HISTORY_LEN-1)*W;
+      const y = H - ((h.freq-57)/(63-57))*H;
+      ctx.fillRect(x-1, y-1, 2, 2);
+    });
+    ctx.restore();
+  }
+
+  // ---------- Game Over / Leaderboard ----------
+  function endGame(victory, reason){
+    running=false; clearInterval(timer); timer=null; setButtons();
+    const score = Math.round( profit + (uptimeTicks/ticks)*25000 - totalEmissionsT*500 );
+    const rows = [
+      ['Result', victory?'Stable run':'Blackout'],
+      ['Reason', reason],
+      ['Profit', '$'+fmt(profit)],
+      ['Uptime', (ticks?Math.round(100*uptimeTicks/ticks):0)+'%'],
+      ['Energy Delivered', fmt(totalDeliveredMWh.toFixed?Number(totalDeliveredMWh.toFixed(0)):totalDeliveredMWh)+' MWh'],
+      ['Emissions', fmt(totalEmissionsT.toFixed?Number(totalEmissionsT.toFixed(0)):totalEmissionsT)+' t'],
+      ['Final Cash', '$'+fmt(cash)],
+      ['Reputation', Math.round(rep)],
+      ['Score', fmt(score)]
+    ];
+    const st = el('#scoreTable'); st.innerHTML='';
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<th>${r[0]}</th><td>${r[1]}</td>`;
+      st.appendChild(tr);
+    });
+    // store leaderboard
+    const key='grid-tycoon-leaderboard';
+    const lb = JSON.parse(localStorage.getItem(key)||'[]');
+    lb.push({ when:Date.now(), score, profit, uptime: ticks?Math.round(100*uptimeTicks/ticks):0, emissions: totalEmissionsT });
+    lb.sort((a,b)=>b.score-a.score); while(lb.length>8) lb.pop();
+    localStorage.setItem(key, JSON.stringify(lb));
+    renderLeaderboard(lb);
+    el('#goTitle').textContent = victory?'You made it!':'Game Over';
+    el('#goMsg').textContent = reason;
+    openModal('#modalGameOver');
+  }
+// Function: renderLeaderboard(lb) — purpose: [describe]. Returns: [value/void].
+  function renderLeaderboard(lb){
+    const lt = el('#leaderTable'); lt.innerHTML='';
+    const head = document.createElement('tr');
+    head.innerHTML='<th>Rank</th><th>Score</th><th>Profit</th><th>Uptime</th><th>Emissions</th>';
+    lt.appendChild(head);
+    lb.forEach((r,i)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML = `<td>${i+1}</td><td>${fmt(r.score)}</td><td>$${fmt(r.profit)}</td><td>${r.uptime}%</td><td>${fmt(Math.round(r.emissions))} t</td>`;
+      lt.appendChild(tr);
+    });
+  }
+
+  // ---------- Loop Controls ----------
+  function start(){
+    if(running) return;
+    difficulty = el('#difficulty').value;
+    speed = Number(el('#speed').value);
+    running=true;
+// Timer: setInterval — periodic task
+    timer = setInterval(()=>{ for(let i=0;i<speed;i++) tick(); }, TICK_MS_BASE);
+    el('#startBtn').disabled=true; el('#pauseBtn').disabled=false; el('#resetBtn').disabled=false;
+    toastMsg('Simulation started.');
+  }
+// Function: pause() — purpose: [describe]. Returns: [value/void].
+  function pause(){
+    if(!running) return;
+    running=false; clearInterval(timer); timer=null; setButtons(); toastMsg('Paused.');
+  }
+// Function: reset() — purpose: [describe]. Returns: [value/void].
+  function reset(){ initGame(); }
+
+  // ---------- Build & Offers UI ----------
+  function openModal(sel){ const m = el(sel); if(m){ m.style.display='flex'; } }
+// Function: closeModal(sel) — purpose: [describe]. Returns: [value/void].
+  function closeModal(sel){ const m = el(sel); if(m){ m.style.display='none'; } }
+
+  // ---------- Events ----------
+  function toastMsg(text){
+    toast.textContent = text; toast.style.display='block';
+    clearTimeout(toast._t);
+// Timer: setTimeout — one-shot delayed task
+    toast._t = setTimeout(()=> toast.style.display='none', 2400);
+  }
+
+  // ---------- Wire UI ----------
+  el('#startBtn').addEventListener('click', start);
+// UI: Event listener for 'click'
+  el('#pauseBtn').addEventListener('click', pause);
+// UI: Event listener for 'click'
+  el('#resetBtn').addEventListener('click', reset);
+// UI: Event listener for 'change'
+  el('#speed').addEventListener('change', ()=>{ speed=Number(el('#speed').value); if(running){ pause(); start(); }});
+
+// UI: Event listener for 'click'
+  el('#openBuild').addEventListener('click', ()=>{ renderBuildables(); openModal('#modalBuild'); });
+// UI: Event listener for 'click'
+  el('#openOffers').addEventListener('click', ()=>{ renderOffers(); openModal('#modalOffers'); });
+// UI: Event listener for 'click'
+  el('#openUpgrades').addEventListener('click', ()=>{ renderUpgrades(); openModal('#modalUpgrades'); });
+
+// UI: Event listener for 'click'
+  el('#howto').addEventListener('click', ()=> openModal('#modalHowto'));
+// UI: Event listener for 'click'
+  els('.close').forEach(btn=> btn.addEventListener('click', ()=> closeModal(btn.getAttribute('data-close'))));
+// UI: Event listener for 'click'
+  els('.modal').forEach(m=> m.addEventListener('click', (e)=>{ if(e.target===m) m.style.display='none'; }));
+
+// Function: renderLegend() — purpose: [describe]. Returns: [value/void].
+  function renderLegend(){
+    const lg = el('#chartLegend'); if(!lg) return;
+    lg.innerHTML = '<div class="legend-item"><span class="legend-swatch" style="background:#6ee7ff"></span> Demand</div>' +
+                   '<div class="legend-item"><span class="legend-swatch" style="background:#7afabf"></span> Supply</div>' +
+                   '<div class="legend-item"><span class="legend-dot" style="background:#ffd166"></span> Frequency</div>';
+  }
+
+  // ---------- Bootstrap ----------
+  initGame();
+  renderLegend();
+
+  // Draw loop (history) — keep smooth even when paused
+  function rafLoop(){
+    drawHistory();
+// Game Loop/Animation: requestAnimationFrame used for per-frame updates
+    requestAnimationFrame(rafLoop);
+  }
+  rafLoop();
+
+})();

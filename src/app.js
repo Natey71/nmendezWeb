@@ -19,7 +19,10 @@ app.use(express.json());
 // Routes
 // Use routes
 import homeRoutes from './routes/index.js';
+import gamesRoutes from './routes/games.js';
+
 app.use('/', homeRoutes);
+app.use('/games', gamesRoutes);
 // Middleware handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -43,10 +46,8 @@ async function startServer() {
     console.error("Failed to retrieve secret:", error);
   }
 
-  const PORT = process.env.PORT || 4000;
-  app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-  });
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, '0.0.0.0');
 }
 
 startServer();

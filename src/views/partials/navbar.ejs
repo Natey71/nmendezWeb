@@ -1,54 +1,49 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <link href="/css/output.css" rel="stylesheet"/>
-</head>
-<body class="bg-white dark:bg-gray-900">
-  <nav class="bg-white dark:bg-gray-800 shadow">
-    <div class="w-full px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16">
-        <!-- Left Side: Brand and Dark Mode Toggle -->
-        <div class="flex">
-          <!-- Brand -->
-          <a href="/" class="flex-shrink-0 flex items-center text-xl font-bold text-gray-800 dark:text-white">
-            MyApp
-          </a>
-          
-          <!-- Dark Mode Toggle -->
-          <button id="dark-mode-toggle" aria-label="Toggle Dark Mode" class="ml-4 m-2 my-4 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center space-x-2">
-            <!-- Sun Icon (Light Mode) -->
-            <svg id="toggle-light-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M12 3v1m0 16v1m8.66-8.66h-1M4.34 12h-1m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 5a7 7 0 000 14a7 7 0 000-14z" />
-            </svg>
-            <!-- Moon Icon (Dark Mode) -->
-            <svg id="toggle-dark-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-            </svg>
-            <!-- Default Icon: Sun (for initial load) -->
-            <svg id="toggle-default-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M12 3v1m0 16v1m8.66-8.66h-1M4.34 12h-1m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 5a7 7 0 000 14a7 7 0 000-14z" />
-            </svg>
-          </button>
-        </div>
-        
-        <!-- Center: Navigation Links -->
-        <div class="hidden sm:ml-6 sm:flex sm:space-x-8 items-center">
-          <ul class="flex space-x-4">
-            <li>
-              <a href="/Games" class="text-gray-800 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 px-3 py-2 rounded-md text-lg font-medium">
-                Games
-              </a>
-            </li>
-          </ul>
-        </div>
-        
+<nav class="bg-white dark:bg-gray-800 shadow">
+  <div class="w-full px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between h-16">
+      <div class="flex">
+        <a href="/" class="flex-shrink-0 flex items-center text-xl font-bold text-gray-800 dark:text-white">
+          MyApp
+        </a>
+        <button
+          id="dark-mode-toggle"
+          aria-label="Toggle Dark Mode"
+          class="ml-4 m-2 my-4 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center space-x-2"
+        >
+          <svg id="toggle-light-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 3v1m0 16v1m8.66-8.66h-1M4.34 12h-1m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 5a7 7 0 000 14a7 7 0 000-14z"
+            />
+          </svg>
+          <svg id="toggle-dark-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+          </svg>
+          <svg id="toggle-default-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 3v1m0 16v1m8.66-8.66h-1M4.34 12h-1m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M12 5a7 7 0 000 14a7 7 0 000-14z"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div class="hidden sm:ml-6 sm:flex sm:space-x-8 items-center">
+        <ul class="flex space-x-4">
+          <li>
+            <a
+              href="/games"
+              class="text-gray-800 dark:text-white hover:text-indigo-500 dark:hover:text-indigo-400 px-3 py-2 rounded-md text-lg font-medium"
+            >
+              Games
+            </a>
+          </li>
+        </ul>
       </div>
     </div>
-  </nav>
-  
-  <!-- Dark Mode Toggle Script -->
-</body>
-</html>
+  </div>
+</nav>
