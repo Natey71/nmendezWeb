@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link href="/css/output.css" rel="stylesheet" />
+  </head>
+  <body class="bg-white dark:bg-gray-900 min-h-screen">
+    <%- include('../partials/navbar') %>
+
+    <main class="container mx-auto px-4 py-12">
+      <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+          Choose a Game to Play
+        </h1>
+        <p class="text-lg text-gray-700 dark:text-gray-300">
+          Pick one of the games below to jump right in. More titles will arrive soon!
+        </p>
+      </header>
+
+      <section class="grid gap-8 md:grid-cols-2">
+        <article class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 shadow-sm">
+          <h2 class="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+            Power Grid Tycoon
+          </h2>
+          <p class="text-gray-700 dark:text-gray-300 mb-6">
+            Build and manage your own energy empire. Balance resources, expand your grid, and keep the lights on for your city.
+          </p>
+          <a
+            href="/games/power-grid-tycoon"
+            class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-6 py-3 text-lg font-medium text-white transition hover:bg-indigo-500"
+          >
+            Launch Power Grid Tycoon
+          </a>
+        </article>
+
+        <article class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 shadow-sm">
+          <h2 class="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+            Tetris
+          </h2>
+          <p class="text-gray-700 dark:text-gray-300 mb-6">
+            The classic block-stacking challenge. Clear lines, rack up points, and test your reflexes in this timeless puzzle.
+          </p>
+          <a
+            href="/games/tetris"
+            class="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-6 py-3 text-lg font-medium text-white transition hover:bg-indigo-500"
+          >
+            Launch Tetris
+          </a>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/js/index.js"></script>
+  </body>
+</html>
