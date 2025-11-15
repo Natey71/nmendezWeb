@@ -24,6 +24,7 @@ export function finalizeSupplyDemandBalance({
   generators = [],
   events = [],
   reservePct = 0,
+  reserveMW,
   batteryDispatch
 }) {
   const adjustedDemand = applyEventAdjustments({ demand, generators, events });
@@ -41,8 +42,10 @@ export function finalizeSupplyDemandBalance({
   const supply = preDispatchSupply + batteryDelta;
   const rawBalance = supply - adjustedDemand;
   const oversupply = Math.max(0, rawBalance);
-  const reserveMW = Math.round(adjustedDemand * reservePct);
-  const oversupplyBeyondReserve = Math.max(0, oversupply - reserveMW);
+  const reserveTarget = Number.isFinite(reserveMW)
+    ? Math.max(0, Math.round(reserveMW))
+    : Math.max(0, Math.round(adjustedDemand * reservePct));
+  const oversupplyBeyondReserve = Math.max(0, oversupply - reserveTarget);
   const deficit = adjustedDemand - supply;
 
   return {
@@ -51,7 +54,7 @@ export function finalizeSupplyDemandBalance({
     batteryDelta,
     rawBalance,
     oversupply,
-    reserveMW,
+    reserveMW: reserveTarget,
     oversupplyBeyondReserve,
     deficit,
     imbalanceBeforeStorage,
