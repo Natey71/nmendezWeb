@@ -40,72 +40,10 @@ body {
 
 .game-layout {
         display: flex;
-        justify-content: center;
+        justify-content: space-between;
         align-items: flex-start;
         gap: 32px;
-}
-
-.control-column {
-        flex: 0 0 260px;
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        position: sticky;
-        top: 120px;
-        align-self: flex-start;
-}
-
-.season-panel {
-        background: linear-gradient(180deg, var(--panel), var(--panel-2));
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 16px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
-}
-
-.season-panel .hud-panel,
-.season-panel #seasonHud {
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        padding: 0;
-}
-
-.control-stack {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-}
-
-.control-stack .btn,
-.control-stack .btn:link,
-.control-stack .btn:visited {
-        width: 100%;
-        text-align: center;
-        display: block;
-}
-
-.control-selects {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        background: linear-gradient(180deg, var(--panel), var(--panel-2));
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 14px 16px;
-        box-shadow: 0 10px 24px rgba(0, 0, 0, .25);
-        font-size: 13px;
-        color: var(--muted);
-}
-
-.control-selects label {
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        font-weight: 600;
-}
-
-.control-selects select {
-        margin-bottom: 4px;
+        flex-wrap: nowrap;
 }
 
 .game-main {
@@ -116,23 +54,6 @@ body {
         gap: 24px;
 }
 
-.game-main-content {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-        gap: 28px;
-        align-items: flex-start;
-}
-
-.game-main-content .notification-sidebar {
-        grid-column: 2;
-}
-
-.game-main-column {
-        grid-column: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-}
 
 .main-panels {
         display: grid;
@@ -237,10 +158,28 @@ body {
         border-radius: 16px;
         padding: 16px 20px;
         min-width: 0;
-        box-shadow: 0 15px 35px rgba(0, 0, 0, .45);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
         display: flex;
         flex-direction: column;
         gap: 14px;
+}
+
+.season-inline {
+        margin: 20px 0 12px;
+}
+
+.season-inline__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+}
+
+.season-inline__title {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
 }
 
 .season-themed {
@@ -1020,30 +959,8 @@ canvas {
                 flex-direction: column;
         }
 
-        .control-column {
-                position: static;
-                flex-direction: row;
-                flex-wrap: wrap;
-                gap: 12px;
-        }
-
-        .season-panel {
-                flex: 1 1 100%;
-        }
-
-        .control-stack {
-                flex-direction: row;
-                flex-wrap: wrap;
-        }
-
-        .control-stack .btn,
-        .control-stack .btn:link,
-        .control-stack .btn:visited {
-                flex: 1 1 160px;
-        }
-
-        .control-selects {
-                flex: 1 1 200px;
+        .game-layout {
+                flex-direction: column;
         }
 
         .notification-sidebar {
@@ -1051,15 +968,6 @@ canvas {
                 width: 100%;
                 max-width: none;
                 max-height: none;
-        }
-
-        .game-main-content {
-                grid-template-columns: 1fr;
-        }
-
-        .game-main-content .notification-sidebar,
-        .game-main-column {
-                grid-column: 1;
         }
 
         .container {
