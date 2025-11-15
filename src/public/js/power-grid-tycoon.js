@@ -9,6 +9,7 @@
 import { applyEventAdjustments, finalizeSupplyDemandBalance } from './power-grid-sim-core.js';
 import { createSupplyDemandToleranceTracker } from './supply-demand-tolerance.js';
 import { computeReserveRequirement } from './reserve-requirement.js';
+import { buildForecastTimeline, formatGameClockLabel } from './time-utils.js';
 
 (function(){
   // ---------- Utilities ----------
@@ -51,6 +52,9 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const notificationLogEl = el('#notificationLog');
   const notificationLogWrapperEl = el('#notificationLogWrapper');
   const historyCanvas = el('#history'), ctx = historyCanvas.getContext('2d');
+  const forecastCanvas = el('#forecastHistory');
+  const forecastCtx = forecastCanvas?.getContext?.('2d') || null;
+  const forecastLegendEl = el('#forecastLegend');
   const seasonHudEl = el('#seasonHud');
   const timerEl = el('#timer'),
         seasonEl = el('#hudSeason'),
@@ -93,6 +97,11 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const SAFE_HZ_MIN = 58.5, SAFE_HZ_MAX = 61.5, TARGET_HZ = 60.0;
   const DAY_SECONDS = 720;          // 12 real minutes = 24h in-game (1 in-game hour ≈ 30s)
   const HISTORY_LEN = 60;           // seconds for chart
+  const HISTORY_AXIS_HEIGHT = 18;
+  const FORECAST_HORIZON_SECONDS = 60;
+  const FORECAST_STEP_SECONDS = 5;
+  const FORECAST_AXIS_HEIGHT = 20;
+  const FORECAST_COLORS = ['#f97316','#34d399','#60a5fa','#e879f9','#facc15','#22d3ee','#fb7185','#a3e635','#c084fc','#67e8f9','#fb923c'];
   const SEASONS = ['Spring','Summer','Fall','Winter'];
   const DAYS_PER_SEASON = 28;
   const SEASON_CLASS_MAP = {
@@ -243,11 +252,13 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   let events     = []; // active timed events
   let fuelMultipliers = { coal:1, gas:1 };
   let batteryCounter = 0;
+  const customerColorMap = new Map();
 
   // ---------- Initialization ----------
   function initGame(){
     // Start assets (altered: include a 100 MW starter battery and four independent 10 MW gas turbines; max 40 MW thermal)
       batteryCounter = 0;
+      customerColorMap.clear();
       const starterBattery = makeBattery({
         id: 'battery-1',
         name: 'Battery 1',
@@ -311,7 +322,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     els('.modal').forEach(m=>m.style.display='none');
 
     renderGenList(); renderCustList(); renderBuildables(); renderUpgrades();
-    updateUI(0,0,0,0); drawHistory();
+    updateUI(0,0,0,0); drawHistory(); drawForecast();
     setButtons();
     toastMsg('Ready. Build your grid.');
     updateClock();
@@ -535,6 +546,8 @@ import { computeReserveRequirement } from './reserve-requirement.js';
 // UI: Event listener for 'click'
       el(`#${c.id}-switch`).addEventListener('click', (e)=>{ e.preventDefault(); c.connected=!c.connected; updateCustSwitch(c); });
     }
+    renderForecastLegend();
+    drawForecast();
   }
 // Function: updateCustSwitch(c) — purpose: [describe]. Returns: [value/void].
   function updateCustSwitch(c){
@@ -543,6 +556,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     const input=sw.querySelector('input'); if(input) input.checked = !!c.connected;
     // minor rep effect for disconnects
     rep = clamp(rep + (c.connected? +1 : -2), 0, 110);
+    drawForecast();
   }
 
   // ---------- Buildables / Upgrades ----------
@@ -1089,6 +1103,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     updateUI(demand, supply, rawBalance, reserveMW);
     pushHistory(demand, supply, rawBalance, freq);
     drawHistory();
+    drawForecast();
     updateClock();
   }
 
@@ -1743,18 +1758,22 @@ function updateGasFleetUI(){
 
 // Function: pushHistory(demand, supply, balance, freq) — purpose: [describe]. Returns: [value/void].
   function pushHistory(demand, supply, balance, freq){
-    history.push({demand,supply,balance,freq});
+    const timeSec = normalizeDaySeconds(secondsInDay);
+    history.push({demand,supply,balance,freq,timeSec});
     while(history.length>HISTORY_LEN) history.shift();
   }
 // Function: drawHistory() — purpose: [describe]. Returns: [value/void].
   function drawHistory(){
+    if(!historyCanvas) return;
     const W = historyCanvas.width, H = historyCanvas.height;
+    const axisHeight = HISTORY_AXIS_HEIGHT;
+    const chartHeight = Math.max(10, H - axisHeight);
     ctx.clearRect(0,0,W,H);
     ctx.save(); ctx.translate(0,0);
     // grid
     ctx.globalAlpha = 0.15; ctx.strokeStyle = '#7aa1ff'; ctx.lineWidth=1;
     ctx.beginPath();
-    for(let i=0;i<=6;i++){ const y=i*H/6; ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    for(let i=0;i<=6;i++){ const y=i*chartHeight/6; ctx.moveTo(0,y); ctx.lineTo(W,y); }
     ctx.stroke(); ctx.globalAlpha=1;
 
     // scale
@@ -1767,7 +1786,8 @@ function updateGasFleetUI(){
       ctx.beginPath();
       history.forEach((h,i)=>{
         const x = i/(HISTORY_LEN-1)*W;
-        const y = H - (h[key]/maxVal)*H;
+        const value = Number.isFinite(h[key]) ? h[key] : 0;
+        const y = chartHeight - (value/maxVal)*chartHeight;
         if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
       });
     }
@@ -1780,10 +1800,147 @@ function updateGasFleetUI(){
     ctx.fillStyle='#ffd166';
     history.forEach((h,i)=>{
       const x = i/(HISTORY_LEN-1)*W;
-      const y = H - ((h.freq-57)/(63-57))*H;
+      const freqVal = Number.isFinite(h.freq) ? h.freq : TARGET_HZ;
+      const y = chartHeight - ((freqVal-57)/(63-57))*chartHeight;
       ctx.fillRect(x-1, y-1, 2, 2);
     });
+
+    // time axis
+    const axisY = chartHeight + 0.5;
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(0, axisY);
+    ctx.lineTo(W, axisY);
+    ctx.stroke();
+
+    if(history.length>1){
+      const tickCount = Math.min(4, history.length);
+      ctx.fillStyle = '#9fb0ff';
+      ctx.font = '10px "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      for(let i=0;i<tickCount;i++){
+        const idx = Math.round(i*(history.length-1)/(tickCount-1 || 1));
+        const sample = history[idx];
+        if(!sample) continue;
+        const x = idx/(HISTORY_LEN-1)*W;
+        ctx.beginPath();
+        ctx.moveTo(x, axisY);
+        ctx.lineTo(x, axisY+4);
+        ctx.stroke();
+        const labelTime = Number.isFinite(sample.timeSec) ? sample.timeSec : secondsInDay;
+        const label = formatGameClockLabel(labelTime, DAY_SECONDS);
+        ctx.fillText(label, x, axisY+4);
+      }
+    }
+
     ctx.restore();
+  }
+
+  function getCustomerColor(customer, index){
+    if(!customer) return FORECAST_COLORS[index % FORECAST_COLORS.length];
+    if(customerColorMap.has(customer.id)) return customerColorMap.get(customer.id);
+    const color = FORECAST_COLORS[index % FORECAST_COLORS.length];
+    customerColorMap.set(customer.id, color);
+    return color;
+  }
+
+  function forecastCustomerDemandAtTime(customer, absoluteSeconds){
+    if(!customer) return 0;
+    const normalized = normalizeDaySeconds(absoluteSeconds);
+    const hour = (normalized / DAY_SECONDS) * 24;
+    const shape = demandProfileMultiplier(customer, hour);
+    const baseMW = Number.isFinite(customer.baseMW) ? customer.baseMW : 0;
+    const volatility = Number.isFinite(customer.volatility) ? customer.volatility : 1;
+    const connectedFactor = customer.connected ? 1 : 0;
+    const predicted = baseMW * shape * volatility * connectedFactor;
+    return Math.round(clamp(predicted, 0, baseMW * 1.8));
+  }
+
+  function drawForecast(){
+    if(!forecastCanvas || !forecastCtx) return;
+    const W = forecastCanvas.width;
+    const H = forecastCanvas.height;
+    const axisHeight = FORECAST_AXIS_HEIGHT;
+    const chartHeight = Math.max(10, H - axisHeight);
+    forecastCtx.clearRect(0,0,W,H);
+    forecastCtx.save();
+
+    forecastCtx.globalAlpha = 0.12;
+    forecastCtx.strokeStyle = '#7aa1ff';
+    forecastCtx.lineWidth = 1;
+    forecastCtx.beginPath();
+    for(let i=0;i<=4;i+=1){
+      const y = i*chartHeight/4;
+      forecastCtx.moveTo(0,y);
+      forecastCtx.lineTo(W,y);
+    }
+    forecastCtx.stroke();
+    forecastCtx.globalAlpha = 1;
+
+    if(!customers.length){
+      forecastCtx.fillStyle = '#9fb0ff';
+      forecastCtx.font = '12px "Inter", sans-serif';
+      forecastCtx.textAlign = 'center';
+      forecastCtx.fillText('No customers connected', W/2, chartHeight/2);
+      forecastCtx.restore();
+      return;
+    }
+
+    const timeline = buildForecastTimeline({
+      startSeconds: secondsInDay,
+      horizonSeconds: FORECAST_HORIZON_SECONDS,
+      stepSeconds: FORECAST_STEP_SECONDS,
+      daySeconds: DAY_SECONDS
+    });
+    const series = customers.map((customer, idx)=>({
+      customer,
+      color: getCustomerColor(customer, idx),
+      values: timeline.map(point=> forecastCustomerDemandAtTime(customer, point.absoluteSeconds))
+    }));
+
+    const allValues = series.flatMap(s=>s.values);
+    const maxVal = Math.max(20, ...allValues);
+
+    series.forEach(line=>{
+      forecastCtx.beginPath();
+      forecastCtx.strokeStyle = line.color;
+      line.values.forEach((val, idx)=>{
+        const ratio = timeline.length>1 ? idx/(timeline.length-1) : 0;
+        const x = ratio * W;
+        const value = Number.isFinite(val) ? val : 0;
+        const y = chartHeight - (value / maxVal) * chartHeight;
+        if(idx===0) forecastCtx.moveTo(x,y); else forecastCtx.lineTo(x,y);
+      });
+      forecastCtx.stroke();
+    });
+
+    const axisY = chartHeight + 0.5;
+    forecastCtx.strokeStyle = 'rgba(255,255,255,0.35)';
+    forecastCtx.beginPath();
+    forecastCtx.moveTo(0, axisY);
+    forecastCtx.lineTo(W, axisY);
+    forecastCtx.stroke();
+
+    const tickCount = Math.min(4, timeline.length);
+    forecastCtx.fillStyle = '#9fb0ff';
+    forecastCtx.font = '10px "Inter", sans-serif';
+    forecastCtx.textAlign = 'center';
+    forecastCtx.textBaseline = 'top';
+    for(let i=0;i<tickCount;i+=1){
+      const idx = Math.round(i*(timeline.length-1)/(tickCount-1 || 1));
+      const point = timeline[idx];
+      const ratio = timeline.length>1 ? idx/(timeline.length-1) : 0;
+      const x = ratio * W;
+      forecastCtx.beginPath();
+      forecastCtx.moveTo(x, axisY);
+      forecastCtx.lineTo(x, axisY+4);
+      forecastCtx.stroke();
+      const label = formatGameClockLabel(point?.absoluteSeconds ?? secondsInDay, DAY_SECONDS);
+      forecastCtx.fillText(label, x, axisY+4);
+    }
+
+    forecastCtx.restore();
   }
 
   // ---------- Game Over / Leaderboard ----------
@@ -2009,6 +2166,19 @@ function updateGasFleetUI(){
                    '<div class="legend-item"><span class="legend-dot" style="background:#ffd166"></span> Frequency</div>';
   }
 
+  function renderForecastLegend(){
+    if(!forecastLegendEl) return;
+    if(!customers.length){
+      forecastLegendEl.innerHTML = '<span class="muted">No customers connected.</span>';
+      return;
+    }
+    const items = customers.map((c, idx)=>{
+      const color = getCustomerColor(c, idx);
+      return `<div class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${escapeHtml(c.name)}</div>`;
+    }).join('');
+    forecastLegendEl.innerHTML = items;
+  }
+
   // ---------- Bootstrap ----------
   initGame();
   renderLegend();
@@ -2019,6 +2189,7 @@ function updateGasFleetUI(){
   // Draw loop (history) - keep smooth even when paused
   function rafLoop(){
     drawHistory();
+    drawForecast();
 // Game Loop/Animation: requestAnimationFrame used for per-frame updates
     requestAnimationFrame(rafLoop);
   }
