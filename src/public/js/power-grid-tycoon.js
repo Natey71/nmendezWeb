@@ -351,7 +351,6 @@ import { computeReserveRequirement } from './reserve-requirement.js';
      row.innerHTML = `
        <div class="name">Gas Turbines (Fleet)
          <span class="tag">gas</span>
-         <div class="muted small">${total} × ${capEach} MW • Startup 3s</div>
        </div>
        <div class="status">Online: <strong id="gas-online">${online}</strong> / ${total}</div>
        <div class="status">Out: <strong id="gas-out">${fmt(totalOut)}</strong> MW <span class="muted">| OPEX $${opexEach} each</span></div>
@@ -359,7 +358,10 @@ import { computeReserveRequirement } from './reserve-requirement.js';
          <div class="tight small" id="gas-controls">
            ${Array.from({length: total+1}, (_,n)=>`<button class="btn small" data-gas-n="${n}">${n}</button>`).join(' ')}
          </div>
-       </div>`;
+       </div>
+         <div class="muted small">${total} × ${capEach} MW • Startup 3s</div>
+       `;
+
      genList.appendChild(row);
      // Wire 0–N buttons
      row.querySelectorAll('[data-gas-n]').forEach(btn=>{
