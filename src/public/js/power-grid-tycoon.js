@@ -926,6 +926,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   // ---------- Main Tick ----------
   function tick(){
     ticks++;
+    t += 1;
     const endedDay = day;
     const endedSeasonIndex = seasonIndex;
     secondsInDay = (secondsInDay+1) % DAY_SECONDS;
