@@ -31,7 +31,17 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const dLbl = el('#demandLbl'), sLbl = el('#supplyLbl'), dBar = el('#dBar'), sBar = el('#sBar');
   const needle = el('#needle'), toast = el('#toast');
   const historyCanvas = el('#history'), ctx = historyCanvas.getContext('2d');
-  const timerEl = el('#timer'), clockEl = el('#clock'), overloadBanner = el('#overloadBanner'), overloadPill = el('#overloadPill'), overloadRemainEl = el('#overloadRemain'), overloadReasonEl = el('#overloadReason');
+  const timerEl = el('#timer'),
+        seasonEl = el('#hudSeason'),
+        dayEl = el('#hudDay'),
+        timeEl = el('#hudTime'),
+        demandAvgEl = el('#hudDemandAvg'),
+        supplyAvgEl = el('#hudSupplyAvg'),
+        incomeAvgEl = el('#hudIncomeAvg'),
+        overloadBanner = el('#overloadBanner'),
+        overloadPill = el('#overloadPill'),
+        overloadRemainEl = el('#overloadRemain'),
+        overloadReasonEl = el('#overloadReason');
   const genList = el('#genList'), custList = el('#custList');
   const batteryStatusEl = el('#batteryStatus');
   const buildTbody = el('#buildTable tbody'), buildQueueEl = el('#buildQueue');
@@ -43,6 +53,8 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const SAFE_HZ_MIN = 58.5, SAFE_HZ_MAX = 61.5, TARGET_HZ = 60.0;
   const DAY_SECONDS = 300;          // 5 real minutes = 24h in-game
   const HISTORY_LEN = 60;           // seconds for chart
+  const SEASONS = ['Spring','Summer','Fall','Winter'];
+  const DAYS_PER_SEASON = 28;
 
   // Alterations per request
   const OVERLOAD_GRACE = 45;        // 45s grace to fix overload instead of instant stop
@@ -82,7 +94,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
 
   // ---------- Game State ----------
   let running=false, timer=null, difficulty='normal', speed=1;
-  let t=0, day=0, secondsInDay=0;
+  let t=0, day=0, secondsInDay=0, seasonIndex=0;
   let freq=TARGET_HZ, price=80, cash=250000, rep=50;
   let totalDeliveredMWh=0, totalEmissionsT=0, totalOpex=0, totalRevenue=0, profit=0;
   let uptimeTicks=0, ticks=0;
@@ -93,6 +105,9 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const TELEMETRY_VERSION = 1;
   const MAX_TELEMETRY_FRAMES = 3600;
   let runTelemetry = [];
+  let currentHourIndex = 0;
+  let hourlyTotals = { demand:0, supply:0, income:0, ticks:0 };
+  let hourlyAverages = { demand:0, supply:0, income:0 };
 
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
@@ -144,7 +159,9 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     fuelMultipliers = { coal:1, gas:1 };
 
     running=false; clearInterval(timer); timer=null;
-    t=0; day=1; secondsInDay=6*60; // start at 06:00
+    t=0; day=1; seasonIndex=0;
+    secondsInDay = Math.round(DAY_SECONDS * (6/24)); // start at 06:00
+    resetHourlyStats(hourIndexFromSeconds(secondsInDay));
     freq=TARGET_HZ; price=80; cash=250000; rep=50;
     totalDeliveredMWh=0; totalEmissionsT=0; totalOpex=0; totalRevenue=0; profit=0;
     uptimeTicks=0; ticks=0; history=[]; runTelemetry=[]; latestResult=null;
@@ -156,6 +173,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     updateUI(0,0,0,0); drawHistory();
     setButtons();
     toastMsg('Ready. Build your grid.');
+    updateClock();
   }
 
 // Function: setButtons() — purpose: [describe]. Returns: [value/void].
@@ -765,8 +783,20 @@ import { computeReserveRequirement } from './reserve-requirement.js';
 
   // ---------- Main Tick ----------
   function tick(){
-    ticks++; secondsInDay = (secondsInDay+1) % DAY_SECONDS; if(secondsInDay===0) day++;
-    updateClock();
+    ticks++;
+    secondsInDay = (secondsInDay+1) % DAY_SECONDS;
+    if(secondsInDay===0){
+      day++;
+      if(day> DAYS_PER_SEASON){
+        day = 1;
+        seasonIndex = (seasonIndex + 1) % SEASONS.length;
+      }
+    }
+
+    const hourIndex = hourIndexFromSeconds(secondsInDay);
+    if(hourIndex !== currentHourIndex){
+      resetHourlyStats(hourIndex);
+    }
     // 1) Demand
     let demand = 0;
     for(const c of customers){
@@ -844,7 +874,8 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     totalEmissionsT += emissions;
     totalDeliveredMWh += delivered * tickHours;
 
-    cash += (revenue - opex);
+    const income = revenue - opex;
+    cash += income;
     totalRevenue += revenue;
     profit = totalRevenue - totalOpex;
 
@@ -879,6 +910,19 @@ import { computeReserveRequirement } from './reserve-requirement.js';
       }
     }
 
+    // Hourly aggregates for HUD
+    hourlyTotals.demand += demand;
+    hourlyTotals.supply += supply;
+    hourlyTotals.income += income;
+    hourlyTotals.ticks += 1;
+    if(hourlyTotals.ticks>0){
+      hourlyAverages = {
+        demand: hourlyTotals.demand / hourlyTotals.ticks,
+        supply: hourlyTotals.supply / hourlyTotals.ticks,
+        income: hourlyTotals.income / hourlyTotals.ticks
+      };
+    }
+
     // 8) Timers
     updateBuildQueue();
     maybeOffer();
@@ -890,6 +934,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     updateUI(demand, supply, rawBalance, reserveMW);
     pushHistory(demand, supply, rawBalance, freq);
     drawHistory();
+    updateClock();
   }
 
   function recordTelemetryFrame({ demand, supply, price, freq, tickHours }){
@@ -926,6 +971,27 @@ import { computeReserveRequirement } from './reserve-requirement.js';
       }))
     };
     runTelemetry.push(frame);
+  }
+
+  function normalizeDaySeconds(sec){
+    return ((sec % DAY_SECONDS) + DAY_SECONDS) % DAY_SECONDS;
+  }
+
+  function hourIndexFromSeconds(sec){
+    return Math.floor((normalizeDaySeconds(sec) / DAY_SECONDS) * 24);
+  }
+
+  function resetHourlyStats(hourIndex=0){
+    currentHourIndex = Number.isFinite(hourIndex) ? hourIndex : 0;
+    hourlyTotals = { demand:0, supply:0, income:0, ticks:0 };
+    hourlyAverages = { demand:0, supply:0, income:0 };
+  }
+
+  function formatHourlyIncome(value){
+    const rounded = Math.round(Number.isFinite(value) ? value : 0);
+    const prefix = rounded < 0 ? '−' : '+';
+    const absVal = Math.abs(rounded);
+    return `${prefix}$${fmt(absVal)}`;
   }
 
 // Function: updateBuildQueue() — purpose: [describe]. Returns: [value/void].
@@ -1018,13 +1084,24 @@ function updateGasFleetUI(){
 }
 // Function: updateClock() — purpose: [describe]. Returns: [value/void].
   function updateClock(){
-    const hourFloat = secondsInDay / DAY_SECONDS * 24;
+    const normalized = normalizeDaySeconds(secondsInDay);
+    const hourFloat = (normalized / DAY_SECONDS) * 24;
     const hh = Math.floor(hourFloat);
     const mm = Math.floor((hourFloat - hh)*60);
 // Function (arrow): pad(n) — purpose: [describe].
     const pad = n => n.toString().padStart(2,'0');
-    clockEl.textContent = `Day ${day} — ${pad(hh)}:${pad(mm)}`;
-    timerEl.textContent = 'Sandbox';
+
+    if(timeEl) timeEl.textContent = `${pad(hh)}:${pad(mm)}`;
+    if(dayEl) dayEl.textContent = `Day ${day}`;
+    if(seasonEl) seasonEl.textContent = SEASONS[seasonIndex] || SEASONS[0];
+
+    const avgDemand = Number.isFinite(hourlyAverages.demand) ? hourlyAverages.demand : 0;
+    const avgSupply = Number.isFinite(hourlyAverages.supply) ? hourlyAverages.supply : 0;
+    if(demandAvgEl) demandAvgEl.textContent = fmt(avgDemand);
+    if(supplyAvgEl) supplyAvgEl.textContent = fmt(avgSupply);
+    if(incomeAvgEl) incomeAvgEl.textContent = formatHourlyIncome(hourlyAverages.income);
+
+    if(timerEl) timerEl.textContent = 'Sandbox';
   }
 
 // Function: pushHistory(demand, supply, balance, freq) — purpose: [describe]. Returns: [value/void].

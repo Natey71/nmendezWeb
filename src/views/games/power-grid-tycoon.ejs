@@ -12,9 +12,33 @@
 </head>
 
 <body class="bg-white dark:bg-gray-900 min-h-screen">
-	<%- include('../partials/navbar') %>
+        <%- include('../partials/navbar') %>
 
-		<div class="container">
+        <div id="seasonHud" class="hud-panel" aria-live="polite">
+                <div class="hud-header">
+                        <span id="hudSeason" class="hud-season">Spring</span>
+                        <div class="hud-time">
+                                <span id="hudDay" class="hud-day">Day 1</span>
+                                <span id="hudTime" class="hud-clock">06:00</span>
+                        </div>
+                </div>
+                <div class="hud-metrics">
+                        <div class="hud-metric">
+                                <span class="label">Avg Demand</span>
+                                <span class="value"><span id="hudDemandAvg">0</span> MW</span>
+                        </div>
+                        <div class="hud-metric">
+                                <span class="label">Avg Supply</span>
+                                <span class="value"><span id="hudSupplyAvg">0</span> MW</span>
+                        </div>
+                        <div class="hud-metric">
+                                <span class="label">Avg Income</span>
+                                <span class="value" id="hudIncomeAvg">+$0</span>
+                        </div>
+                </div>
+        </div>
+
+                <div class="container">
 			<header>
 				<div>
 					<h1>Grid Tycoon — Mini Power Manager</h1>
@@ -133,11 +157,10 @@
 
 				<section class="card">
 					<div class="section-title">
-						<div class="tight">
-							<strong>Operations</strong>
-							<span class="pill" id="clock">Day 1 — 06:00</span>
-							<span class="pill bad" id="overloadPill" style="display:none">OVERLOAD — fix in <span
-									id="overloadRemain">45</span>s</span>
+                                                        <div class="tight">
+                                                        <strong>Operations</strong>
+                                                        <span class="pill bad" id="overloadPill" style="display:none">OVERLOAD — fix in <span
+                                                                        id="overloadRemain">45</span>s</span>
 						</div>
 						<div class="tight">
 							<button id="openBuild" class="btn">Build</button>
