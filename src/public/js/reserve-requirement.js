@@ -65,3 +65,5 @@ export function computeReserveRequirement({
 
   return Math.max(0, reserve);
 }
+
+export default { computeReserveRequirement };
