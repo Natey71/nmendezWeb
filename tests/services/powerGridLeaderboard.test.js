@@ -1,9 +1,9 @@
 // tests/services/powerGridLeaderboard.test.js
-import { describe, it, before, beforeEach, after } from 'node:test';
+import { describe, it, before, beforeEach, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'os';
 import path from 'path';
-import * as fsp from 'fs/promises';
+import { promises as fsp } from 'fs';
 
 let appendLeaderboardEntry;
 let getLeaderboard;
@@ -69,11 +69,11 @@ describe('powerGridLeaderboard service', () => {
     const writeCalls = [];
 
     // Slow + instrument writes to simulate contention
-    fsp.writeFile = async (...args) => {
+    const writeMock = mock.method(fsp, 'writeFile', async (...args) => {
       writeCalls.push(args);
       await wait(5);
       return originalWriteFile.apply(fsp, args);
-    };
+    });
 
     try {
       const jobs = Array.from({ length: 8 }, (_, i) =>
@@ -97,7 +97,7 @@ describe('powerGridLeaderboard service', () => {
 
       assert.deepEqual(scores, sortedScores);
     } finally {
-      fsp.writeFile = originalWriteFile;
+      writeMock.mock.restore();
     }
   });
 });
