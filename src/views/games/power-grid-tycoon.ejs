@@ -16,34 +16,62 @@
 
                 <div class="container">
                         <div class="game-layout">
-                                <aside class="season-column">
-                                        <div id="seasonHud" class="hud-panel season-themed season-theme--spring" aria-live="polite">
-                                                <div class="hud-header">
-                                                        <span id="hudSeason" class="hud-season">Spring</span>
-                                                        <div class="hud-time">
-                                                                <span id="hudDay" class="hud-day">Day 1</span>
-                                                                <span id="hudTime" class="hud-clock">06:00</span>
+                                <aside class="control-column" aria-label="Game controls">
+                                        <div class="season-panel">
+                                                <div id="seasonHud" class="hud-panel season-themed season-theme--spring" aria-live="polite">
+                                                        <div class="hud-header">
+                                                                <span id="hudSeason" class="hud-season">Spring</span>
+                                                                <div class="hud-time">
+                                                                        <span id="hudDay" class="hud-day">Day 1</span>
+                                                                        <span id="hudTime" class="hud-clock">06:00</span>
+                                                                </div>
                                                         </div>
-                                                </div>
-                                                <div class="hud-metrics">
-                                                        <div class="hud-metric">
-                                                                <span class="label">Avg Demand</span>
-                                                                <span class="value"><span id="hudDemandAvg">0</span> MW</span>
-                                                        </div>
-                                                        <div class="hud-metric">
-                                                                <span class="label">Avg Supply</span>
-                                                                <span class="value"><span id="hudSupplyAvg">0</span> MW</span>
-                                                        </div>
-                                                        <div class="hud-metric">
-                                                                <span class="label">Avg Income</span>
-                                                                <span class="value" id="hudIncomeAvg">+$0</span>
+                                                        <div class="hud-metrics">
+                                                                <div class="hud-metric">
+                                                                        <span class="label">Avg Demand</span>
+                                                                        <span class="value"><span id="hudDemandAvg">0</span> MW</span>
+                                                                </div>
+                                                                <div class="hud-metric">
+                                                                        <span class="label">Avg Supply</span>
+                                                                        <span class="value"><span id="hudSupplyAvg">0</span> MW</span>
+                                                                </div>
+                                                                <div class="hud-metric">
+                                                                        <span class="label">Avg Income</span>
+                                                                        <span class="value" id="hudIncomeAvg">+$0</span>
+                                                                </div>
                                                         </div>
                                                 </div>
                                         </div>
 
+                                        <div class="control-stack">
+                                                <button id="startBtn" class="btn">Start</button>
+                                                <button id="pauseBtn" class="btn" disabled>Pause</button>
+                                                <button id="resetBtn" class="btn" disabled>Reset</button>
+                                                <button id="openDailyReport" class="btn">Daily Reports</button>
+                                                <button id="openSeasonReport" class="btn">Season Reports</button>
+                                                <button id="howto" class="btn">How to Play</button>
+                                                <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
+                                        </div>
+                                        <div class="control-selects">
+                                                <label for="difficulty">Difficulty</label>
+                                                <select id="difficulty">
+                                                        <option value="easy">Easy</option>
+                                                        <option value="normal" selected>Normal</option>
+                                                        <option value="hard">Hard</option>
+                                                </select>
+                                                <label for="speed">Game Speed</label>
+                                                <select id="speed">
+                                                        <option value="1">1×</option>
+                                                        <option value="2">2×</option>
+                                                        <option value="4">4×</option>
+                                                </select>
+                                        </div>
+                                </aside>
+
+                                <div class="game-main">
                                         <section class="card kpi-card" aria-label="Key performance indicators">
                                                 <h2 class="section-heading">Live KPIs</h2>
-                                                <div class="kpis">
+                                                <div class="kpis kpis--horizontal">
                                                         <div class="kpi">
                                                                 <h3>Demand</h3>
                                                                 <div class="val"><span id="demand">0</span> MW</div>
@@ -78,43 +106,33 @@
                                                         </div>
                                                 </div>
                                         </section>
-                                </aside>
 
-                                <div class="game-main">
-                                        <header>
-                                                <div>
-                                                        <h1>Grid Tycoon — Mini Power Manager</h1>
-                                                        <div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your
-                                                                grid. An
-                                                                adaptive reserve margin adjusts with online capacity and forecast ramps.</div>
-                                                </div>
-                                                <div class="controls">
-                                                        <button id="startBtn" class="btn">Start</button>
-                                                        <button id="pauseBtn" class="btn" disabled>Pause</button>
-                                                        <button id="resetBtn" class="btn" disabled>Reset</button>
-                                                        <select id="difficulty">
-                                                                <option value="easy">Easy</option>
-                                                                <option value="normal" selected>Normal</option>
-                                                                <option value="hard">Hard</option>
-                                                        </select>
-                                                        <select id="speed">
-                                                                <option value="1">1×</option>
-                                                                <option value="2">2×</option>
-                                                                <option value="4">4×</option>
-                                                        </select>
-                                                        <button id="openDailyReport" class="btn">Daily Reports</button>
-                                                        <button id="openSeasonReport" class="btn">Season Reports</button>
-                                                        <button id="howto" class="btn">How to Play</button>
-                                                        <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
-                                                </div>
-                                        </header>
+                                        <div class="game-main-content">
+                                                <aside class="notification-sidebar" aria-label="Notification log">
+                                                        <div class="notification-sidebar__header">
+                                                                <h2>Notifications</h2>
+                                                        </div>
+                                                        <div id="notificationLogWrapper" class="notification-log-wrapper">
+                                                                <ol id="notificationLog" class="notification-log" aria-live="polite"></ol>
+                                                        </div>
+                                                </aside>
 
-                                        <div id="overloadBanner" class="overload-banner" style="display:none">
-                                                <strong>OVERLOAD</strong> — fix in <span id="overloadRemain">45</span>s
-                                                <span id="overloadReasonWrap"> — <span id="overloadReason"></span></span>
-                                        </div>
+                                                <div class="game-main-column">
+                                                        <header class="page-header">
+                                                                <div>
+                                                                        <h1>Grid Tycoon — Mini Power Manager</h1>
+                                                                        <div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your
+                                                                                grid. An
+                                                                                adaptive reserve margin adjusts with online capacity and forecast ramps.</div>
+                                                                </div>
+                                                        </header>
 
-                                        <div class="main-panels">
+                                                        <div id="overloadBanner" class="overload-banner" style="display:none">
+                                                                <strong>OVERLOAD</strong> — fix in <span id="overloadRemain">45</span>s
+                                                                <span id="overloadReasonWrap"> — <span id="overloadReason"></span></span>
+                                                        </div>
+
+                                                        <div class="main-panels">
                                                 <section class="card status-card" aria-label="Grid status">
                                                         <div class="bars">
                                                                 <div class="bar">
@@ -202,18 +220,11 @@
                                                                 </div>
                                                         </div>
                                                 </section>
+                                                        </div>
+                                                </div>
                                         </div>
                                 </div>
-                                <aside class="notification-sidebar" aria-label="Notification log">
-                                        <div class="notification-sidebar__header">
-                                                <h2>Notifications</h2>
-                                        </div>
-                                        <div id="notificationLogWrapper" class="notification-log-wrapper">
-                                                <ol id="notificationLog" class="notification-log" aria-live="polite"></ol>
-                                        </div>
-                                </aside>
                         </div>
-                </div>
 
 		<!-- Toast -->
 		<div id="toast" class="toast"></div>
