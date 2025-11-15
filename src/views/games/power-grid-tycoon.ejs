@@ -119,6 +119,17 @@
                                                                                 <span class="muted">58.5–61.5 Hz safe • Moderate oversupply within the dynamic reserve band is tolerated</span>
                                                                                 <span class="muted"> | Stability (60s)</span>
                                                                         </div>
+                                                                        <div class="forecast-chart" aria-label="Upcoming demand forecast">
+                                                                                <div class="forecast-chart__header">
+                                                                                        <div>
+                                                                                                <div class="forecast-chart__title">Upcoming Demand</div>
+                                                                                                <div class="forecast-chart__subtitle">Next ~2 in-game hours • target ±15% accuracy</div>
+                                                                                        </div>
+                                                                                        <div class="forecast-chart__meta">Forecast window: 60s</div>
+                                                                                </div>
+                                                                                <canvas id="forecastHistory" height="140" aria-label="Upcoming demand forecast chart"></canvas>
+                                                                                <div id="forecastLegend" class="chart-legend"></div>
+                                                                        </div>
                                                                 </div>
                                                         </div>
 
