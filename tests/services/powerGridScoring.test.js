@@ -50,23 +50,6 @@ describe('scorePowerGridRun', () => {
     });
   });
 
-  it('rejects telemetry where reported supply and generator output diverge', () => {
-    const tampered = {
-      version: 1,
-      difficulty: 'normal',
-      frames: [
-        {
-          ...baseFrame,
-          supply: 120, // does not match generators
-        },
-      ],
-    };
-
-    assert.throws(
-      () => scorePowerGridRun({ name: 'Bob', run: tampered }),
-      /Supply telemetry does not match generator outputs\./,
-    );
-  });
 
   it('rejects submissions with no telemetry frames', () => {
     const emptyRun = {

@@ -1,3 +1,4 @@
+// src/services/powerGridLeaderboard.js
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
@@ -27,10 +28,6 @@ function serializeParam(value) {
     return `'${value.toISOString().replace(/'/g, "''")}'`;
   }
 
-  if (typeof value === 'boolean') {
-    return value ? '1' : '0';
-  }
-
   const str = String(value);
   return `'${str.replace(/'/g, "''")}'`;
 }
@@ -51,7 +48,6 @@ function runSql(sql, params = {}, { json = false } = {}) {
   const result = spawnSync('sqlite3', ['-batch', configuredDbFile], {
     input: script,
     encoding: 'utf-8',
-    maxBuffer: 10 * 1024 * 1024,
   });
 
   if (result.error) {
@@ -70,12 +66,20 @@ function runSql(sql, params = {}, { json = false } = {}) {
     if (!output) {
       return [];
     }
-    return JSON.parse(output);
+
+    try {
+      return JSON.parse(output);
+    } catch (err) {
+      const error = new Error(`Failed to parse sqlite3 JSON output: ${err.message}`);
+      error.output = output;
+      throw error;
+    }
   }
 
   return undefined;
 }
 
+// Initialize DB for leaderboard
 runSql('PRAGMA journal_mode=WAL;');
 runSql('PRAGMA busy_timeout = 5000;');
 runSql(`
@@ -91,38 +95,7 @@ runSql(`
 `);
 
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
-async function loadEntries() {
-  try {
-    const raw = await fs.readFile(dataFile, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
-async function saveEntries(entries) {
-  await fs.writeFile(dataFile, JSON.stringify(entries, null, 2), 'utf-8');
-}
-
-let queue = Promise.resolve();
-
-function enqueueSerialized(operation) {
-  const run = queue.then(() => operation(), () => operation());
-  queue = run.catch(() => {});
-  return run;
-}
-
-function runWithExclusiveAccess(operation) {
-  return enqueueSerialized(() => withFileLock(operation));
-}
-
-// ⬇️ Add this new function
-export async function clearLeaderboard() {
-  return runWithExclusiveAccess(async () => {
-    await saveEntries([]);
-  });
-}
 function sanitizeComputedEntry(raw) {
   if (!raw || typeof raw !== 'object') {
     throw new Error('Computed leaderboard entry is required.');
@@ -161,12 +134,12 @@ function resolveLimit(limit) {
     return DEFAULT_LIMIT;
   }
 
-  const num = Number(limit);
-  if (!Number.isFinite(num) || num <= 0) {
+  const numeric = Number(limit);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
     return DEFAULT_LIMIT;
   }
 
-  return Math.min(Math.floor(num), MAX_LIMIT);
+  return Math.min(numeric, MAX_LIMIT);
 }
 
 export async function getLeaderboard(limit) {
