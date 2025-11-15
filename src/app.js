@@ -2,8 +2,6 @@ import express from 'express';
 import 'dotenv/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import  bodyParser from 'body-parser';
-import session from 'express-session';
 // Initialize Express app
 // Set view engine to EJS (you can use Pug or just static HTML if preferred)
 const __filename = fileURLToPath(import.meta.url);
@@ -12,8 +10,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // get secret
 // Routes
@@ -35,8 +33,6 @@ app.use((req, res, next) => {
 // Middleware for serving static files (CSS, JS)
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
 
 
 async function startServer() {
@@ -50,6 +46,8 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0');
 }
 
-startServer();
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
-// Start server
+export default app;
