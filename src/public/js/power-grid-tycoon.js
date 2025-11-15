@@ -104,23 +104,23 @@ import { computeReserveRequirement } from './reserve-requirement.js';
 
   const SEASONAL_CLIMATE = {
     Spring: {
-      sunrise: 6.6,   // ~6:36 AM average in Columbia, SC
-      sunset: 19.8,   // ~7:48 PM
+      sunrise: 6.5,   // ~6:36 AM average in Columbia, SC
+      sunset: 20.0,   // ~7:48 PM
       solarPeak: 0.95,
       windRange: [9, 22],
       windRefSpeed: 26,
       lateSeasonWindBoost: 1.12
     },
     Summer: {
-      sunrise: 6.15,  // ~6:09 AM
-      sunset: 20.35,  // ~8:21 PM (most sunlight)
+      sunrise: 6.0,  // ~6:09 AM
+      sunset: 20.5,  // ~8:21 PM (most sunlight)
       solarPeak: 1.05,
       windRange: [6, 17],
       windRefSpeed: 24,
       lateSeasonWindBoost: 1.02
     },
     Fall: {
-      sunrise: 7.1,   // ~7:06 AM
+      sunrise: 7.0,   // ~7:06 AM
       sunset: 18.5,   // ~6:30 PM
       solarPeak: 0.9,
       windRange: [10, 23],
@@ -128,8 +128,8 @@ import { computeReserveRequirement } from './reserve-requirement.js';
       lateSeasonWindBoost: 1.15
     },
     Winter: {
-      sunrise: 7.3,   // ~7:18 AM
-      sunset: 17.25,  // ~5:15 PM
+      sunrise: 7.5,   // ~7:18 AM
+      sunset: 17.5,  // ~5:15 PM
       solarPeak: 0.8,
       windRange: [5, 15],
       windRefSpeed: 23,
