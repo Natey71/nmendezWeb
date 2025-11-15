@@ -66,4 +66,37 @@ describe('powerGridLeaderboard service', () => {
       appendLeaderboardEntry({ name: 'Eve', profit: 100, uptime: 80, emissions: 5 }),
     ).rejects.toThrow('Leaderboard entry is missing score.');
   });
+
+  test('serializes concurrent leaderboard writes to avoid data loss', async () => {
+    const originalWriteFile = fsp.writeFile;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    fsp.writeFile = jest.fn(async (...args) => {
+      await wait(5);
+      return originalWriteFile.apply(fsp, args);
+    });
+
+    try {
+      const jobs = Array.from({ length: 8 }, (_, i) =>
+        appendLeaderboardEntry({
+          name: `Player ${i + 1}`,
+          score: 1000 + i * 10,
+          profit: 5000 + i,
+          uptime: 95,
+          emissions: 10 + i,
+        }),
+      );
+
+      const results = await Promise.all(jobs);
+      expect(results).toHaveLength(8);
+
+      const stored = await getLeaderboard();
+      expect(stored).toHaveLength(8);
+      const scores = stored.map((entry) => entry.score);
+      const sortedScores = [...scores].sort((a, b) => b - a);
+      expect(scores).toEqual(sortedScores);
+    } finally {
+      fsp.writeFile = originalWriteFile;
+    }
+  });
 });
