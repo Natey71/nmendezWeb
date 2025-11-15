@@ -230,6 +230,36 @@ body {
         letter-spacing: 0.3px;
 }
 
+.hud-atmosphere {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: flex-start;
+        color: var(--muted);
+        font-size: 13px;
+        min-width: 220px;
+}
+
+.hud-atmosphere__item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 120px;
+}
+
+.hud-atmosphere__label {
+        font-size: 11px;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        opacity: 0.75;
+}
+
+.hud-atmosphere__value {
+        color: var(--text);
+        font-weight: 600;
+}
+
 .hud-day {
         font-size: 18px;
         color: var(--text);

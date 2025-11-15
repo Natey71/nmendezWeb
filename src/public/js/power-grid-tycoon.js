@@ -23,6 +23,18 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const rand = (a, b) => a + Math.random()*(b-a);
 // Function (arrow): choice(arr) — purpose: [describe].
   const choice = arr => arr[Math.floor(Math.random()*arr.length)];
+  const padClock = n => n.toString().padStart(2,'0');
+  const weightedChoice = (options=[]) => {
+    const safeOptions = options.filter(opt => typeof opt?.weight === 'number' && opt.weight > 0);
+    const total = safeOptions.reduce((sum,opt)=>sum+opt.weight,0);
+    if(!safeOptions.length || total<=0) return safeOptions[0]?.type;
+    let pick = Math.random()*total;
+    for(const opt of safeOptions){
+      pick -= opt.weight;
+      if(pick<=0) return opt.type;
+    }
+    return safeOptions[safeOptions.length-1]?.type;
+  };
   const escapeHtml = (str='') => String(str)
     .replace(/&/g,'&amp;')
     .replace(/</g,'&lt;')
@@ -44,6 +56,8 @@ import { computeReserveRequirement } from './reserve-requirement.js';
         seasonEl = el('#hudSeason'),
         dayEl = el('#hudDay'),
         timeEl = el('#hudTime'),
+        sunlightInfoEl = el('#hudSunlightInfo'),
+        windInfoEl = el('#hudWindInfo'),
         demandAvgEl = el('#hudDemandAvg'),
         supplyAvgEl = el('#hudSupplyAvg'),
         incomeAvgEl = el('#hudIncomeAvg'),
@@ -77,7 +91,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   // ---------- Config ----------
   const TICK_MS_BASE = 1000;
   const SAFE_HZ_MIN = 58.5, SAFE_HZ_MAX = 61.5, TARGET_HZ = 60.0;
-  const DAY_SECONDS = 300;          // 5 real minutes = 24h in-game
+  const DAY_SECONDS = 720;          // 12 real minutes = 24h in-game (1 in-game hour ≈ 30s)
   const HISTORY_LEN = 60;           // seconds for chart
   const SEASONS = ['Spring','Summer','Fall','Winter'];
   const DAYS_PER_SEASON = 28;
@@ -86,6 +100,72 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     summer: 'season-theme--summer',
     fall: 'season-theme--fall',
     winter: 'season-theme--winter'
+  };
+
+  const SEASONAL_CLIMATE = {
+    Spring: {
+      sunrise: 6.6,   // ~6:36 AM average in Columbia, SC
+      sunset: 19.8,   // ~7:48 PM
+      solarPeak: 0.95,
+      windRange: [9, 22],
+      windRefSpeed: 26,
+      lateSeasonWindBoost: 1.12
+    },
+    Summer: {
+      sunrise: 6.15,  // ~6:09 AM
+      sunset: 20.35,  // ~8:21 PM (most sunlight)
+      solarPeak: 1.05,
+      windRange: [6, 17],
+      windRefSpeed: 24,
+      lateSeasonWindBoost: 1.02
+    },
+    Fall: {
+      sunrise: 7.1,   // ~7:06 AM
+      sunset: 18.5,   // ~6:30 PM
+      solarPeak: 0.9,
+      windRange: [10, 23],
+      windRefSpeed: 27,
+      lateSeasonWindBoost: 1.15
+    },
+    Winter: {
+      sunrise: 7.3,   // ~7:18 AM
+      sunset: 17.25,  // ~5:15 PM
+      solarPeak: 0.8,
+      windRange: [5, 15],
+      windRefSpeed: 23,
+      lateSeasonWindBoost: 1.05
+    }
+  };
+
+  const WEATHER_TYPES = {
+    sunny: { label:'Sunny', solarMultiplier:1.0, windMultiplier:0.95, windSpeedBonus:0 },
+    cloudy: { label:'Cloudy', solarMultiplier:0.75, windMultiplier:1.0, windSpeedBonus:-0.5 },
+    rainy: { label:'Rainy', solarMultiplier:0.55, windMultiplier:1.12, windSpeedBonus:0.8 },
+    winterRain: { label:'Cold Rain', solarMultiplier:0.45, windMultiplier:1.18, windSpeedBonus:1.1 }
+  };
+
+  const WEATHER_WEIGHTS = {
+    Spring: [
+      { type:'sunny', weight:0.5 },
+      { type:'cloudy', weight:0.3 },
+      { type:'rainy', weight:0.2 }
+    ],
+    Summer: [
+      { type:'sunny', weight:0.6 },
+      { type:'cloudy', weight:0.25 },
+      { type:'rainy', weight:0.15 }
+    ],
+    Fall: [
+      { type:'sunny', weight:0.4 },
+      { type:'cloudy', weight:0.3 },
+      { type:'rainy', weight:0.3 }
+    ],
+    Winter: [
+      { type:'sunny', weight:0.3 },
+      { type:'cloudy', weight:0.35 },
+      { type:'rainy', weight:0.2 },
+      { type:'winterRain', weight:0.15 }
+    ]
   };
 
   // Alterations per request
@@ -148,6 +228,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   let totalSeasonsCompleted = 0;
   let lastSeasonSkin = null;
   let notificationLog = [];
+  let dailyAtmosphere = null;
 
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
@@ -216,6 +297,8 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     renderNotificationLog();
     renderDailyLog();
     renderSeasonLog();
+    dailyAtmosphere = rollDailyAtmosphere({ announce:false });
+    announceDailyAtmosphere();
     if(dailyReportMetricsEl) dailyReportMetricsEl.innerHTML = '';
     if(seasonReportMetricsEl) seasonReportMetricsEl.innerHTML = '';
     if(dailyReportLeadEl) dailyReportLeadEl.textContent = 'No daily reports yet.';
@@ -598,20 +681,24 @@ import { computeReserveRequirement } from './reserve-requirement.js';
 
   // ---------- Renewable Output ----------
   function updateRenewables(sec){
+    const climate = getActiveClimate();
+    const weather = WEATHER_TYPES[dailyAtmosphere?.weather] || WEATHER_TYPES.sunny;
+    const solarFactor = computeSolarFactor(sec, climate, weather);
+    const windSnapshot = computeWindSnapshot(sec, climate, weather);
+    if(dailyAtmosphere) dailyAtmosphere.latestWindSpeed = windSnapshot.speed;
     for(const g of generators){
       if(g.variable){
         if(g.fuel==='wind'){
           if(g.on){
-            const drift = rand(-5,5);
-            g.actual = clamp((g.actual||rand(8,18))+drift, 5, g.cap);
+            const jitter = rand(-0.05,0.05);
+            const factor = clamp((windSnapshot.factor || 0) + jitter, 0, 1.15);
+            g.actual = Math.round(g.cap * factor);
           }else g.actual=0;
         }
         if(g.fuel==='solar'){
           if(g.on){
-            const cyc = Math.sin((sec/DAY_SECONDS)*Math.PI*2 - Math.PI/2);
-            const day = Math.max(0, cyc);
-            const cloud = 0.85 + (Math.random()*0.3 - 0.15); // 0.7—1.0
-            g.actual = Math.round(g.cap * day * cloud);
+            const noise = rand(0.92,1.05);
+            g.actual = Math.round(g.cap * solarFactor * noise);
           }else g.actual=0;
         }
       }
@@ -859,6 +946,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
       }
       resetPeriodTotals(dailyTotals);
       updateSeasonSkin();
+      rollDailyAtmosphere();
     }
 
     const hourIndex = hourIndexFromSeconds(secondsInDay);
@@ -1063,6 +1151,138 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     const prefix = rounded < 0 ? '−' : '+';
     const absVal = Math.abs(rounded);
     return `${prefix}$${fmt(absVal)}`;
+  }
+
+  // ---------- Atmosphere & Weather ----------
+  function rollDailyAtmosphere({ announce=true } = {}){
+    const state = createDailyAtmosphereState();
+    dailyAtmosphere = state;
+    if(announce) announceDailyAtmosphere(state);
+    renderAtmosphereHud();
+    return state;
+  }
+
+  function announceDailyAtmosphere(state = dailyAtmosphere){
+    if(!state) return;
+    const weatherLabel = WEATHER_TYPES[state.weather]?.label || 'Forecast';
+    const daylightHours = Number.isFinite(state.daylightHours) ? state.daylightHours.toFixed(1) : '0.0';
+    const sunriseLabel = formatHourLabel(state.sunrise);
+    const sunsetLabel = formatHourLabel(state.sunset);
+    const windLabel = `${Math.round(state.windLow)}–${Math.round(state.windHigh)} mph`;
+    logNotification(`Forecast: ${weatherLabel} • ${daylightHours}h sun (${sunriseLabel}–${sunsetLabel}) • Winds ${windLabel}`);
+  }
+
+  function createDailyAtmosphereState(){
+    const seasonName = SEASONS[seasonIndex] || SEASONS[0];
+    const climate = getActiveClimate();
+    const weights = WEATHER_WEIGHTS[seasonName] || WEATHER_WEIGHTS.Spring || [];
+    const picked = weightedChoice(weights) || 'sunny';
+    const weather = WEATHER_TYPES[picked] ? picked : 'sunny';
+    const sunrise = Number.isFinite(climate?.sunrise) ? climate.sunrise : 6.5;
+    const sunset = Number.isFinite(climate?.sunset) ? climate.sunset : 19.5;
+    const daylightHours = Math.max(0, sunset - sunrise);
+    const upcomingDayIndex = Math.min(DAYS_PER_SEASON, Math.max(1, (seasonDayCount % DAYS_PER_SEASON) + 1));
+    const lateSeasonBoost = upcomingDayIndex > (DAYS_PER_SEASON/2) ? (climate?.lateSeasonWindBoost || 1) : 1;
+    const range = Array.isArray(climate?.windRange) ? climate.windRange : [6,18];
+    const baseMin = rand(range[0], range[0]+3);
+    const baseMax = rand(Math.max(range[0]+3, range[1]-3), range[1]);
+    const weatherBonus = WEATHER_TYPES[weather]?.windSpeedBonus || 0;
+    const windLow = Math.max(1, (baseMin * lateSeasonBoost) + weatherBonus);
+    const windHigh = Math.max(windLow + 1, (baseMax * lateSeasonBoost) + weatherBonus);
+    const swing = windHigh - windLow;
+    let windDescriptor = 'steady';
+    if(lateSeasonBoost > 1.05) windDescriptor = 'late-season gusts';
+    else if(swing > 8) windDescriptor = 'gusty';
+    else if(swing > 5) windDescriptor = 'breezy';
+    return {
+      season: seasonName,
+      weather,
+      sunrise,
+      sunset,
+      daylightHours,
+      windLow,
+      windHigh,
+      windPhase: rand(0, Math.PI*2),
+      windDescriptor,
+      lateSeasonBoosted: lateSeasonBoost > 1.02
+    };
+  }
+
+  function getActiveClimate(){
+    const seasonName = SEASONS[seasonIndex] || SEASONS[0];
+    return SEASONAL_CLIMATE[seasonName] || SEASONAL_CLIMATE[SEASONS[0]];
+  }
+
+  function computeSolarFactor(sec, climate, weatherCfg){
+    const climateData = climate || getActiveClimate();
+    const weatherData = weatherCfg || WEATHER_TYPES.sunny;
+    const hour = (normalizeDaySeconds(sec) / DAY_SECONDS) * 24;
+    const sunrise = Number.isFinite(dailyAtmosphere?.sunrise) ? dailyAtmosphere.sunrise : climateData.sunrise;
+    const sunset = Number.isFinite(dailyAtmosphere?.sunset) ? dailyAtmosphere.sunset : climateData.sunset;
+    if(!Number.isFinite(sunrise) || !Number.isFinite(sunset) || hour < sunrise || hour > sunset) return 0;
+    const daylight = Math.max(0.25, sunset - sunrise);
+    const progress = clamp((hour - sunrise) / daylight, 0, 1);
+    const solarArc = Math.sin(Math.PI * progress);
+    const seasonMultiplier = climateData?.solarPeak ?? 1;
+    const weatherMultiplier = weatherData?.solarMultiplier ?? 1;
+    return clamp(solarArc * seasonMultiplier * weatherMultiplier, 0, 1.2);
+  }
+
+  function computeWindSnapshot(sec, climate, weatherCfg){
+    const climateData = climate || getActiveClimate();
+    const weatherData = weatherCfg || WEATHER_TYPES.sunny;
+    const windSpeed = getWindSpeedForTime(sec, climateData);
+    const ref = climateData?.windRefSpeed || 25;
+    const baseFactor = ref>0 ? windSpeed / ref : 0;
+    const seasonMultiplier = dailyAtmosphere?.lateSeasonBoosted ? 1.05 : 1;
+    const weatherMultiplier = weatherData?.windMultiplier ?? 1;
+    const factor = clamp(baseFactor * seasonMultiplier * weatherMultiplier, 0, 1.25);
+    return { speed: windSpeed, factor };
+  }
+
+  function getWindSpeedForTime(sec, climateData){
+    const normalized = normalizeDaySeconds(sec) / DAY_SECONDS;
+    const wave = Math.sin((normalized * Math.PI * 2) + (dailyAtmosphere?.windPhase || 0)) * 0.4 + 0.5;
+    const minSpeed = Number.isFinite(dailyAtmosphere?.windLow) ? dailyAtmosphere.windLow : (climateData?.windRange?.[0] || 6);
+    const maxSpeed = Number.isFinite(dailyAtmosphere?.windHigh) ? dailyAtmosphere.windHigh : (climateData?.windRange?.[1] || 18);
+    const base = minSpeed + (maxSpeed - minSpeed) * clamp(wave, 0, 1);
+    const gust = rand(-1.5, 1.5);
+    return Math.max(0, base + gust);
+  }
+
+  function formatHourLabel(hourValue){
+    if(!Number.isFinite(hourValue)) return '--:--';
+    const normalized = ((hourValue % 24) + 24) % 24;
+    let hh = Math.floor(normalized);
+    let mm = Math.round((normalized - hh) * 60);
+    if(mm === 60){
+      hh = (hh + 1) % 24;
+      mm = 0;
+    }
+    return `${padClock(hh)}:${padClock(mm)}`;
+  }
+
+  function renderAtmosphereHud(){
+    if(!sunlightInfoEl && !windInfoEl) return;
+    if(!dailyAtmosphere){
+      if(sunlightInfoEl) sunlightInfoEl.textContent = '—';
+      if(windInfoEl) windInfoEl.textContent = '—';
+      return;
+    }
+    const weatherLabel = WEATHER_TYPES[dailyAtmosphere.weather]?.label || '—';
+    const daylightLabel = Number.isFinite(dailyAtmosphere.daylightHours)
+      ? dailyAtmosphere.daylightHours.toFixed(1)
+      : '0.0';
+    const sunriseLabel = formatHourLabel(dailyAtmosphere.sunrise);
+    const sunsetLabel = formatHourLabel(dailyAtmosphere.sunset);
+    if(sunlightInfoEl){
+      sunlightInfoEl.textContent = `${daylightLabel}h (${sunriseLabel}–${sunsetLabel}, ${weatherLabel})`;
+    }
+    if(windInfoEl){
+      const windRange = `${Math.round(dailyAtmosphere.windLow)}–${Math.round(dailyAtmosphere.windHigh)} mph`;
+      const descriptor = dailyAtmosphere.windDescriptor ? dailyAtmosphere.windDescriptor.trim() : '';
+      windInfoEl.textContent = descriptor ? `${windRange} • ${descriptor}` : windRange;
+    }
   }
 
   function createPeriodTotals(){
@@ -1468,10 +1688,8 @@ function updateGasFleetUI(){
     const hourFloat = (normalized / DAY_SECONDS) * 24;
     const hh = Math.floor(hourFloat);
     const mm = Math.floor((hourFloat - hh)*60);
-// Function (arrow): pad(n) — purpose: [describe].
-    const pad = n => n.toString().padStart(2,'0');
 
-    if(timeEl) timeEl.textContent = `${pad(hh)}:${pad(mm)}`;
+    if(timeEl) timeEl.textContent = `${padClock(hh)}:${padClock(mm)}`;
     if(dayEl) dayEl.textContent = `Day ${day}`;
     if(seasonEl) seasonEl.textContent = SEASONS[seasonIndex] || SEASONS[0];
 
@@ -1482,6 +1700,7 @@ function updateGasFleetUI(){
     if(incomeAvgEl) incomeAvgEl.textContent = formatHourlyIncome(hourlyAverages.income);
 
     if(timerEl) timerEl.textContent = 'Sandbox';
+    renderAtmosphereHud();
   }
 
   function formatLogClock(){
@@ -1489,8 +1708,7 @@ function updateGasFleetUI(){
     const hourFloat = (normalized / DAY_SECONDS) * 24;
     const hh = Math.floor(hourFloat);
     const mm = Math.floor((hourFloat - hh) * 60);
-    const pad = n => n.toString().padStart(2, '0');
-    return `${pad(hh)}:${pad(mm)}`;
+    return `${padClock(hh)}:${padClock(mm)}`;
   }
 
   function logNotification(message){
