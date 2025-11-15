@@ -14,126 +14,82 @@
 <body class="bg-white dark:bg-gray-900 min-h-screen">
         <%- include('../partials/navbar') %>
 
-                <div class="container">
-                        <div class="game-layout">
-                                <aside class="control-column" aria-label="Game controls">
-                                        <div class="season-panel">
-                                                <div id="seasonHud" class="hud-panel season-themed season-theme--spring" aria-live="polite">
-                                                        <div class="hud-header">
-                                                                <span id="hudSeason" class="hud-season">Spring</span>
-                                                                <div class="hud-time">
-                                                                        <span id="hudDay" class="hud-day">Day 1</span>
-                                                                        <span id="hudTime" class="hud-clock">06:00</span>
-                                                                </div>
-                                                        </div>
-                                                        <div class="hud-metrics">
-                                                                <div class="hud-metric">
-                                                                        <span class="label">Avg Demand</span>
-                                                                        <span class="value"><span id="hudDemandAvg">0</span> MW</span>
-                                                                </div>
-                                                                <div class="hud-metric">
-                                                                        <span class="label">Avg Supply</span>
-                                                                        <span class="value"><span id="hudSupplyAvg">0</span> MW</span>
-                                                                </div>
-                                                                <div class="hud-metric">
-                                                                        <span class="label">Avg Income</span>
-                                                                        <span class="value" id="hudIncomeAvg">+$0</span>
-                                                                </div>
-                                                        </div>
-                                                </div>
+        <div class="container">
+                <div class="game-layout">
+                        <div class="game-main">
+                                <header class="page-header">
+                                        <div>
+                                                <h1>Grid Tycoon — Mini Power Manager</h1>
+                                                <div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your
+                                                        grid. An
+                                                        adaptive reserve margin adjusts with online capacity and forecast ramps.</div>
                                         </div>
-
-                                        <div class="control-stack">
+                                        <div class="controls">
                                                 <button id="startBtn" class="btn">Start</button>
                                                 <button id="pauseBtn" class="btn" disabled>Pause</button>
                                                 <button id="resetBtn" class="btn" disabled>Reset</button>
-                                                <button id="openDailyReport" class="btn">Daily Reports</button>
-                                                <button id="openSeasonReport" class="btn">Season Reports</button>
-                                                <button id="howto" class="btn">How to Play</button>
-                                                <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
-                                        </div>
-                                        <div class="control-selects">
-                                                <label for="difficulty">Difficulty</label>
                                                 <select id="difficulty">
                                                         <option value="easy">Easy</option>
                                                         <option value="normal" selected>Normal</option>
                                                         <option value="hard">Hard</option>
                                                 </select>
-                                                <label for="speed">Game Speed</label>
                                                 <select id="speed">
                                                         <option value="1">1×</option>
                                                         <option value="2">2×</option>
                                                         <option value="4">4×</option>
                                                 </select>
+                                                <button id="openDailyReport" class="btn">Daily Reports</button>
+                                                <button id="openSeasonReport" class="btn">Season Reports</button>
+                                                <button id="howto" class="btn">How to Play</button>
+                                                <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
                                         </div>
-                                </aside>
+                                </header>
 
-                                <div class="game-main">
-                                        <section class="card kpi-card" aria-label="Key performance indicators">
-                                                <h2 class="section-heading">Live KPIs</h2>
-                                                <div class="kpis kpis--horizontal">
-                                                        <div class="kpi">
-                                                                <h3>Demand</h3>
-                                                                <div class="val"><span id="demand">0</span> MW</div>
-                                                        </div>
-                                                        <div class="kpi">
-                                                                <h3>Supply</h3>
-                                                                <div class="val"><span id="supply">0</span> MW</div>
-                                                        </div>
-                                                        <div class="kpi">
-                                                                <h3>Balance</h3>
-                                                                <div class="val"><span id="balance">0</span> MW</div>
-                                                        </div>
-                                                        <div class="kpi">
-                                                                <h3>Frequency</h3>
-                                                                <div class="val"><span id="freq">60.00</span> Hz</div>
-                                                        </div>
-                                                        <div class="kpi">
-                                                                <h3>Spot Price</h3>
-                                                                <div class="val">$<span id="price">0</span>/MWh</div>
-                                                        </div>
-                                                        <div class="kpi">
-                                                                <h3>Cash</h3>
-                                                                <div class="val">$<span id="cash">0</span></div>
-                                                        </div>
-                                                        <div class="kpi">
-                                                                <h3>Reputation</h3>
-                                                                <div class="val"><span id="rep">0</span></div>
-                                                        </div>
-                                                        <div class="kpi">
-                                                                <h3>Uptime</h3>
-                                                                <div class="val"><span id="uptime">0</span>%</div>
-                                                        </div>
+                                <section class="card kpi-card" aria-label="Key performance indicators">
+                                        <h2 class="section-heading">Live KPIs</h2>
+                                        <div class="kpis kpis--horizontal">
+                                                <div class="kpi">
+                                                        <h3>Demand</h3>
+                                                        <div class="val"><span id="demand">0</span> MW</div>
                                                 </div>
-                                        </section>
+                                                <div class="kpi">
+                                                        <h3>Supply</h3>
+                                                        <div class="val"><span id="supply">0</span> MW</div>
+                                                </div>
+                                                <div class="kpi">
+                                                        <h3>Balance</h3>
+                                                        <div class="val"><span id="balance">0</span> MW</div>
+                                                </div>
+                                                <div class="kpi">
+                                                        <h3>Frequency</h3>
+                                                        <div class="val"><span id="freq">60.00</span> Hz</div>
+                                                </div>
+                                                <div class="kpi">
+                                                        <h3>Spot Price</h3>
+                                                        <div class="val">$<span id="price">0</span>/MWh</div>
+                                                </div>
+                                                <div class="kpi">
+                                                        <h3>Cash</h3>
+                                                        <div class="val">$<span id="cash">0</span></div>
+                                                </div>
+                                                <div class="kpi">
+                                                        <h3>Reputation</h3>
+                                                        <div class="val"><span id="rep">0</span></div>
+                                                </div>
+                                                <div class="kpi">
+                                                        <h3>Uptime</h3>
+                                                        <div class="val"><span id="uptime">0</span>%</div>
+                                                </div>
+                                        </div>
+                                </section>
 
-                                        <div class="game-main-content">
-                                                <aside class="notification-sidebar" aria-label="Notification log">
-                                                        <div class="notification-sidebar__header">
-                                                                <h2>Notifications</h2>
-                                                        </div>
-                                                        <div id="notificationLogWrapper" class="notification-log-wrapper">
-                                                                <ol id="notificationLog" class="notification-log" aria-live="polite"></ol>
-                                                        </div>
-                                                </aside>
+                                <div id="overloadBanner" class="overload-banner" style="display:none">
+                                        <strong>OVERLOAD</strong> — fix in <span id="overloadRemain">45</span>s
+                                        <span id="overloadReasonWrap"> — <span id="overloadReason"></span></span>
+                                </div>
 
-                                                <div class="game-main-column">
-                                                        <header class="page-header">
-                                                                <div>
-                                                                        <h1>Grid Tycoon — Mini Power Manager</h1>
-                                                                        <div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your
-                                                                                grid. An
-                                                                                adaptive reserve margin adjusts with online capacity and forecast ramps.</div>
-                                                                </div>
-                                                        </header>
-
-                                                        <div id="overloadBanner" class="overload-banner" style="display:none">
-                                                                <strong>OVERLOAD</strong> — fix in <span id="overloadRemain">45</span>s
-                                                                <span id="overloadReasonWrap"> — <span id="overloadReason"></span></span>
-                                                        </div>
-
-                                                        <div class="main-panels">
-                                                <section class="card status-card" aria-label="Grid status">
+                                <div class="main-panels">
+                                        <section class="card status-card" aria-label="Grid status">
                                                         <div class="bars">
                                                                 <div class="bar">
                                                                         <label><span>Demand</span><span id="demandLbl">0 MW</span></label>
@@ -149,7 +105,7 @@
                                                                 </div>
                                                         </div>
 
-                                                        <div class="balance">
+<div class="balance">
                                                                 <div>
                                                                         <div class="dial">
                                                                                 <div class="dial-inner">
@@ -167,7 +123,33 @@
                                                                 </div>
                                                         </div>
 
-                                                        <div class="battery-panel">
+                                                <div id="seasonHud" class="season-inline season-themed season-theme--spring" aria-live="polite">
+                                                        <div class="season-inline__header">
+                                                                <div class="season-inline__title">
+                                                                        <span class="hud-season" id="hudSeason">Spring</span>
+                                                                        <div class="hud-time">
+                                                                                <span id="hudDay" class="hud-day">Day 1</span>
+                                                                                <span id="hudTime" class="hud-clock">06:00</span>
+                                                                        </div>
+                                                                </div>
+                                                        </div>
+                                                        <div class="hud-metrics">
+                                                                <div class="hud-metric">
+                                                                        <span class="label">Avg Demand</span>
+                                                                        <span class="value"><span id="hudDemandAvg">0</span> MW</span>
+                                                                </div>
+                                                                <div class="hud-metric">
+                                                                        <span class="label">Avg Supply</span>
+                                                                        <span class="value"><span id="hudSupplyAvg">0</span> MW</span>
+                                                                </div>
+                                                                <div class="hud-metric">
+                                                                        <span class="label">Avg Income</span>
+                                                                        <span class="value" id="hudIncomeAvg">+$0</span>
+                                                                </div>
+                                                        </div>
+                                                </div>
+
+<div class="battery-panel">
                                                                 <div class="battery-panel-header">
                                                                         <h3>Battery Storage</h3>
                                                                         <span class="muted">Monitor charge levels across your fleet.</span>
@@ -219,12 +201,20 @@
                                                                                 their switches.</div>
                                                                 </div>
                                                         </div>
-                                                </section>
-                                                        </div>
-                                                </div>
-                                        </div>
+                                        </section>
                                 </div>
                         </div>
+
+                        <aside class="notification-sidebar" aria-label="Notification log">
+                                <div class="notification-sidebar__header">
+                                        <h2>Notifications</h2>
+                                </div>
+                                <div id="notificationLogWrapper" class="notification-log-wrapper">
+                                        <ol id="notificationLog" class="notification-log" aria-live="polite"></ol>
+                                </div>
+                        </aside>
+                </div>
+        </div>
 
 		<!-- Toast -->
 		<div id="toast" class="toast"></div>
