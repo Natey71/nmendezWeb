@@ -36,6 +36,15 @@ export const getPowerGridTycoonLeaderboardData = async (req, res, next) => {
 };
 
 export const postPowerGridTycoonLeaderboardEntry = async (req, res, next) => {
+  const submissionName = String(req.body?.name ?? '').trim().slice(0, 64) || 'Anonymous';
+  const runPayload = req.body?.run && typeof req.body.run === 'object' ? req.body.run : null;
+  const telemetryVersion = runPayload?.version ?? runPayload?.telemetryVersion;
+  const frameCount = Array.isArray(runPayload?.frames)
+    ? runPayload.frames.length
+    : Array.isArray(runPayload?.telemetry)
+      ? runPayload.telemetry.length
+      : undefined;
+
   try {
     const computedEntry = scorePowerGridRun(req.body ?? {});
     const entry = await appendLeaderboardEntry(computedEntry);
@@ -43,8 +52,25 @@ export const postPowerGridTycoonLeaderboardEntry = async (req, res, next) => {
     res.status(201).json({ entry, entries });
   } catch (error) {
     if (error?.status === 400) {
+      console.warn('[leaderboard] Rejected leaderboard submission', {
+        playerName: submissionName,
+        reason: error.message,
+        difficulty: runPayload?.difficulty,
+        telemetryVersion,
+        frameCount,
+      });
       return res.status(400).json({ error: error.message });
     }
+
+    console.error('[leaderboard] Failed to save leaderboard entry', {
+      playerName: submissionName,
+      message: error?.message,
+      status: error?.status ?? 500,
+      telemetryVersion,
+      difficulty: runPayload?.difficulty,
+      frameCount,
+      stack: error?.stack,
+    });
     next(error);
   }
 };

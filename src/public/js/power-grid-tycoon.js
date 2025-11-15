@@ -1193,8 +1193,20 @@ function updateGasFleetUI(){
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify(payload)
       });
-      if(!res.ok) throw new Error('Failed to save');
-      const data = await res.json();
+      let data = null;
+      try{
+        data = await res.json();
+      }catch(parseErr){
+        if(res.ok){
+          throw parseErr;
+        }
+      }
+      if(!res.ok){
+        const message = data && typeof data.error === 'string'
+          ? data.error
+          : `Failed to save (status ${res.status})`;
+        throw new Error(message);
+      }
       leaderboardEntries = Array.isArray(data?.entries)?data.entries:leaderboardEntries;
       renderLeaderboard();
       latestResult = null;
@@ -1204,7 +1216,10 @@ function updateGasFleetUI(){
       leaderSaveBtn.textContent = 'Saved';
     }catch(err){
       console.error('Failed to save leaderboard entry', err);
-      setLeaderboardStatus('Unable to save score. Please try again.', 'error');
+      const msg = err && typeof err.message === 'string' && err.message.trim()
+        ? err.message
+        : 'Unable to save score. Please try again.';
+      setLeaderboardStatus(msg, 'error');
       leaderSaveBtn.disabled = false;
       leaderSaveBtn.textContent = 'Save Score';
     }finally{
