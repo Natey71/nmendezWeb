@@ -1,4 +1,5 @@
 import { appendLeaderboardEntry, getLeaderboard } from '../services/powerGridLeaderboard.js';
+import { scorePowerGridRun } from '../services/powerGridScoring.js';
 
 export const getGamesList = (req, res) => {
   res.render('games/index', {
@@ -36,14 +37,14 @@ export const getPowerGridTycoonLeaderboardData = async (req, res, next) => {
 
 export const postPowerGridTycoonLeaderboardEntry = async (req, res, next) => {
   try {
-    const { score } = req.body ?? {};
-    if (!Number.isFinite(Number(score))) {
-      return res.status(400).json({ error: 'Score is required.' });
-    }
-    const entry = await appendLeaderboardEntry(req.body);
+    const computedEntry = scorePowerGridRun(req.body ?? {});
+    const entry = await appendLeaderboardEntry(computedEntry);
     const entries = await getLeaderboard(10);
     res.status(201).json({ entry, entries });
   } catch (error) {
+    if (error?.status === 400) {
+      return res.status(400).json({ error: error.message });
+    }
     next(error);
   }
 };
