@@ -54,6 +54,34 @@ body {
         gap: 14px;
 }
 
+.season-themed {
+        transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.season-theme--spring {
+        background: linear-gradient(180deg, rgba(40, 125, 74, .92), rgba(17, 63, 36, .94)) !important;
+        border-color: rgba(102, 233, 160, .55) !important;
+        box-shadow: 0 18px 40px rgba(17, 63, 36, .55);
+}
+
+.season-theme--summer {
+        background: linear-gradient(180deg, rgba(212, 159, 44, .94), rgba(140, 98, 12, .95)) !important;
+        border-color: rgba(255, 217, 102, .55) !important;
+        box-shadow: 0 18px 40px rgba(140, 98, 12, .5);
+}
+
+.season-theme--fall {
+        background: linear-gradient(180deg, rgba(173, 74, 24, .94), rgba(99, 33, 52, .95)) !important;
+        border-color: rgba(255, 164, 122, .5) !important;
+        box-shadow: 0 18px 40px rgba(99, 33, 52, .55);
+}
+
+.season-theme--winter {
+        background: linear-gradient(180deg, rgba(48, 116, 190, .94), rgba(20, 60, 130, .96)) !important;
+        border-color: rgba(138, 196, 255, .5) !important;
+        box-shadow: 0 18px 40px rgba(20, 60, 130, .55);
+}
+
 .hud-header {
         display: flex;
         flex-direction: column;
@@ -589,7 +617,127 @@ canvas {
 }
 
 .modal .close {
-	margin-top: 12px
+        margin-top: 12px
+}
+
+.period-modal .panel {
+        width: min(760px, 92vw);
+        max-height: calc(100vh - 140px);
+        overflow-y: auto;
+}
+
+.period-panel {
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+}
+
+.period-header {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+}
+
+.period-subtitle {
+        font-size: 14px;
+        color: var(--muted);
+        letter-spacing: 0.3px;
+}
+
+.period-lead {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+}
+
+.period-metrics {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+}
+
+.period-metric {
+        background: rgba(0, 0, 0, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+}
+
+.period-metric .label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--muted);
+}
+
+.period-metric .value {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text);
+}
+
+.period-metric .note {
+        font-size: 12px;
+        color: var(--muted);
+}
+
+.period-log {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+}
+
+.period-log-header h3 {
+        margin: 0;
+        font-size: 16px;
+}
+
+.period-log-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 220px;
+        overflow-y: auto;
+}
+
+.period-log-item {
+        background: rgba(0, 0, 0, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        padding: 12px;
+}
+
+.period-log-title {
+        font-weight: 700;
+        font-size: 14px;
+        margin: 0 0 4px;
+        color: var(--text);
+}
+
+.period-log-body {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+}
+
+.period-empty {
+        font-size: 13px;
+        color: var(--muted);
+        background: rgba(0, 0, 0, 0.18);
+        border: 1px dashed rgba(255, 255, 255, 0.18);
+        border-radius: 12px;
+        padding: 16px;
+}
+
+.period-panel .btn.close {
+        align-self: flex-end;
 }
 
 .table {

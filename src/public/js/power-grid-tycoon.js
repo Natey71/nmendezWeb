@@ -31,6 +31,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const dLbl = el('#demandLbl'), sLbl = el('#supplyLbl'), dBar = el('#dBar'), sBar = el('#sBar');
   const needle = el('#needle'), toast = el('#toast');
   const historyCanvas = el('#history'), ctx = historyCanvas.getContext('2d');
+  const seasonHudEl = el('#seasonHud');
   const timerEl = el('#timer'),
         seasonEl = el('#hudSeason'),
         dayEl = el('#hudDay'),
@@ -47,6 +48,23 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const buildTbody = el('#buildTable tbody'), buildQueueEl = el('#buildQueue');
   const offersArea = el('#offersArea'), upgradesArea = el('#upgradesArea');
   const leaderNameInput = el('#leaderName'), leaderSaveBtn = el('#saveScoreBtn'), leaderSaveStatus = el('#leaderSaveStatus');
+  const openDailyReportBtn = el('#openDailyReport'), openSeasonReportBtn = el('#openSeasonReport');
+  const dailyReportModal = el('#dailyReportModal'),
+        dailyReportPanel = el('#dailyReportPanel'),
+        dailyReportTitleEl = el('#dailyReportTitle'),
+        dailyReportSubtitleEl = el('#dailyReportSubtitle'),
+        dailyReportLeadEl = el('#dailyReportLead'),
+        dailyReportMetricsEl = el('#dailyReportMetrics'),
+        dailyReportLogEl = el('#dailyReportLog'),
+        dailyReportEmptyEl = el('#dailyReportEmpty');
+  const seasonReportModal = el('#seasonReportModal'),
+        seasonReportPanel = el('#seasonReportPanel'),
+        seasonReportTitleEl = el('#seasonReportTitle'),
+        seasonReportSubtitleEl = el('#seasonReportSubtitle'),
+        seasonReportLeadEl = el('#seasonReportLead'),
+        seasonReportMetricsEl = el('#seasonReportMetrics'),
+        seasonReportLogEl = el('#seasonReportLog'),
+        seasonReportEmptyEl = el('#seasonReportEmpty');
 
   // ---------- Config ----------
   const TICK_MS_BASE = 1000;
@@ -55,6 +73,12 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const HISTORY_LEN = 60;           // seconds for chart
   const SEASONS = ['Spring','Summer','Fall','Winter'];
   const DAYS_PER_SEASON = 28;
+  const SEASON_CLASS_MAP = {
+    spring: 'season-theme--spring',
+    summer: 'season-theme--summer',
+    fall: 'season-theme--fall',
+    winter: 'season-theme--winter'
+  };
 
   // Alterations per request
   const OVERLOAD_GRACE = 45;        // 45s grace to fix overload instead of instant stop
@@ -108,6 +132,13 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   let currentHourIndex = 0;
   let hourlyTotals = { demand:0, supply:0, income:0, ticks:0 };
   let hourlyAverages = { demand:0, supply:0, income:0 };
+  let dailyTotals = createPeriodTotals();
+  let seasonTotals = createPeriodTotals();
+  let seasonDayCount = 0;
+  let dailyLogEntries = [];
+  let seasonLogEntries = [];
+  let totalSeasonsCompleted = 0;
+  let lastSeasonSkin = null;
 
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
@@ -165,6 +196,22 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     freq=TARGET_HZ; price=80; cash=250000; rep=50;
     totalDeliveredMWh=0; totalEmissionsT=0; totalOpex=0; totalRevenue=0; profit=0;
     uptimeTicks=0; ticks=0; history=[]; runTelemetry=[]; latestResult=null;
+    resetPeriodTotals(dailyTotals);
+    resetPeriodTotals(seasonTotals);
+    seasonDayCount = 0;
+    dailyLogEntries = [];
+    seasonLogEntries = [];
+    totalSeasonsCompleted = 0;
+    lastSeasonSkin = null;
+    renderDailyLog();
+    renderSeasonLog();
+    if(dailyReportMetricsEl) dailyReportMetricsEl.innerHTML = '';
+    if(seasonReportMetricsEl) seasonReportMetricsEl.innerHTML = '';
+    if(dailyReportLeadEl) dailyReportLeadEl.textContent = 'No daily reports yet.';
+    if(seasonReportLeadEl) seasonReportLeadEl.textContent = 'No seasonal reports yet.';
+    if(dailyReportSubtitleEl) dailyReportSubtitleEl.textContent = `${SEASONS[seasonIndex]} — Day ${day}`;
+    const initYear = Math.floor(totalSeasonsCompleted / SEASONS.length) + 1;
+    if(seasonReportSubtitleEl) seasonReportSubtitleEl.textContent = `${SEASONS[seasonIndex]} • Year ${initYear} (0 days)`;
     overloadActive=false; overloadRemain=0; overloadReason='';
     aceTracker.reset();
     els('.modal').forEach(m=>m.style.display='none');
@@ -174,6 +221,9 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     setButtons();
     toastMsg('Ready. Build your grid.');
     updateClock();
+    updateSeasonSkin();
+    applySeasonSkin(dailyReportPanel, SEASONS[seasonIndex]);
+    applySeasonSkin(seasonReportPanel, SEASONS[seasonIndex]);
   }
 
 // Function: setButtons() — purpose: [describe]. Returns: [value/void].
@@ -784,13 +834,26 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   // ---------- Main Tick ----------
   function tick(){
     ticks++;
+    const endedDay = day;
+    const endedSeasonIndex = seasonIndex;
     secondsInDay = (secondsInDay+1) % DAY_SECONDS;
     if(secondsInDay===0){
-      day++;
-      if(day> DAYS_PER_SEASON){
-        day = 1;
-        seasonIndex = (seasonIndex + 1) % SEASONS.length;
+      const hadDailySummary = finalizeDailyPeriod(endedSeasonIndex, endedDay);
+      if(hadDailySummary){
+        seasonDayCount += 1;
       }
+      const seasonEnded = hadDailySummary && seasonDayCount >= DAYS_PER_SEASON;
+      if(seasonEnded){
+        finalizeSeasonPeriod(endedSeasonIndex, seasonDayCount);
+        resetPeriodTotals(seasonTotals);
+        seasonDayCount = 0;
+        seasonIndex = (seasonIndex + 1) % SEASONS.length;
+        day = 1;
+      }else{
+        day = endedDay + 1;
+      }
+      resetPeriodTotals(dailyTotals);
+      updateSeasonSkin();
     }
 
     const hourIndex = hourIndexFromSeconds(secondsInDay);
@@ -878,6 +941,9 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     cash += income;
     totalRevenue += revenue;
     profit = totalRevenue - totalOpex;
+
+    accumulatePeriodTotals(dailyTotals, { demand, supply, delivered, revenue, opex, income, emissions, tickHours });
+    accumulatePeriodTotals(seasonTotals, { demand, supply, delivered, revenue, opex, income, emissions, tickHours });
 
     // 5) Reputation / uptime
     if(delivered>=demand-0.1){ uptimeTicks++; rep = clamp(rep + 0.04, 0, 110); }
@@ -992,6 +1058,315 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     const prefix = rounded < 0 ? '−' : '+';
     const absVal = Math.abs(rounded);
     return `${prefix}$${fmt(absVal)}`;
+  }
+
+  function createPeriodTotals(){
+    return {
+      demandMWh: 0,
+      supplyMWh: 0,
+      deliveredMWh: 0,
+      revenue: 0,
+      opex: 0,
+      income: 0,
+      emissions: 0,
+      tickHours: 0,
+      tickCount: 0,
+      maxDemand: 0,
+      maxSupply: 0
+    };
+  }
+
+  function resetPeriodTotals(target){
+    if(!target) return;
+    Object.assign(target, createPeriodTotals());
+  }
+
+  function accumulatePeriodTotals(target, { demand=0, supply=0, delivered=0, revenue=0, opex=0, income=0, emissions=0, tickHours=0 }){
+    if(!target) return;
+    const safeHours = Number.isFinite(tickHours) ? tickHours : 0;
+    const safeDemand = Number.isFinite(demand) ? demand : 0;
+    const safeSupply = Number.isFinite(supply) ? supply : 0;
+    const safeDelivered = Number.isFinite(delivered) ? delivered : 0;
+    target.demandMWh += Math.max(0, safeDemand) * safeHours;
+    target.supplyMWh += Math.max(0, safeSupply) * safeHours;
+    target.deliveredMWh += Math.max(0, safeDelivered) * safeHours;
+    target.revenue += Number.isFinite(revenue) ? revenue : 0;
+    target.opex += Number.isFinite(opex) ? opex : 0;
+    target.income += Number.isFinite(income) ? income : 0;
+    target.emissions += Number.isFinite(emissions) ? emissions : 0;
+    target.tickHours += safeHours;
+    target.tickCount += 1;
+    target.maxDemand = Math.max(target.maxDemand, safeDemand);
+    target.maxSupply = Math.max(target.maxSupply, safeSupply);
+  }
+
+  function formatMoney(value, { signed=false } = {}){
+    const number = Number.isFinite(value) ? value : 0;
+    const rounded = Math.round(number);
+    const absStr = fmt(Math.abs(rounded));
+    if(signed){
+      const sign = rounded < 0 ? '−' : '+';
+      return `${sign}$${absStr}`;
+    }
+    if(rounded < 0){
+      return `−$${absStr}`;
+    }
+    return `$${absStr}`;
+  }
+
+  function formatPercent(value){
+    const num = Number.isFinite(value) ? value : 0;
+    return `${num.toFixed(1)}%`;
+  }
+
+  function formatEnergy(value){
+    const num = Number.isFinite(value) ? value : 0;
+    return `${num.toFixed(1)} MWh`;
+  }
+
+  function applySeasonSkin(target, seasonName){
+    if(!target) return;
+    const normalized = (seasonName || '').toLowerCase();
+    target.classList.add('season-themed');
+    for(const cls of Object.values(SEASON_CLASS_MAP)){
+      target.classList.remove(cls);
+    }
+    const mapped = SEASON_CLASS_MAP[normalized];
+    if(mapped) target.classList.add(mapped);
+  }
+
+  function updateSeasonSkin(){
+    const activeSeason = SEASONS[seasonIndex] || SEASONS[0];
+    if(activeSeason === lastSeasonSkin) return;
+    lastSeasonSkin = activeSeason;
+    applySeasonSkin(seasonHudEl, activeSeason);
+  }
+
+  function buildDailySummary(seasonIdx, dayNumber){
+    if(!dailyTotals || dailyTotals.tickCount<=0) return null;
+    const seasonName = SEASONS[seasonIdx] || SEASONS[0];
+    const hours = Number.isFinite(dailyTotals.tickHours) ? dailyTotals.tickHours : 0;
+    const demandMWh = Number.isFinite(dailyTotals.demandMWh) ? dailyTotals.demandMWh : 0;
+    const supplyMWh = Number.isFinite(dailyTotals.supplyMWh) ? dailyTotals.supplyMWh : 0;
+    const deliveredMWh = Number.isFinite(dailyTotals.deliveredMWh) ? dailyTotals.deliveredMWh : 0;
+    const unservedMWh = Math.max(0, demandMWh - deliveredMWh);
+    const avgDemand = hours>0 ? demandMWh / hours : 0;
+    const avgSupply = hours>0 ? supplyMWh / hours : 0;
+    const servedPct = demandMWh>0 ? (deliveredMWh / demandMWh) * 100 : 100;
+    const cycle = Math.floor(totalSeasonsCompleted / SEASONS.length) + 1;
+    return {
+      type: 'daily',
+      seasonIndex: seasonIdx,
+      seasonName,
+      dayNumber,
+      cycle,
+      hours,
+      avgDemand,
+      avgSupply,
+      demandMWh,
+      supplyMWh,
+      deliveredMWh,
+      unservedMWh,
+      servedPct,
+      revenue: dailyTotals.revenue,
+      opex: dailyTotals.opex,
+      income: dailyTotals.income,
+      emissions: dailyTotals.emissions,
+      peakDemand: dailyTotals.maxDemand,
+      peakSupply: dailyTotals.maxSupply
+    };
+  }
+
+  function buildSeasonSummary(seasonIdx, daysCompleted){
+    if(!seasonTotals || seasonTotals.tickCount<=0 || !daysCompleted) return null;
+    const seasonName = SEASONS[seasonIdx] || SEASONS[0];
+    const hours = Number.isFinite(seasonTotals.tickHours) ? seasonTotals.tickHours : 0;
+    const demandMWh = Number.isFinite(seasonTotals.demandMWh) ? seasonTotals.demandMWh : 0;
+    const supplyMWh = Number.isFinite(seasonTotals.supplyMWh) ? seasonTotals.supplyMWh : 0;
+    const deliveredMWh = Number.isFinite(seasonTotals.deliveredMWh) ? seasonTotals.deliveredMWh : 0;
+    const unservedMWh = Math.max(0, demandMWh - deliveredMWh);
+    const avgDemand = hours>0 ? demandMWh / hours : 0;
+    const avgSupply = hours>0 ? supplyMWh / hours : 0;
+    const servedPct = demandMWh>0 ? (deliveredMWh / demandMWh) * 100 : 100;
+    const avgDailyIncome = daysCompleted>0 ? seasonTotals.income / daysCompleted : seasonTotals.income;
+    const cycle = Math.floor(totalSeasonsCompleted / SEASONS.length) + 1;
+    const seasonOrder = totalSeasonsCompleted + 1;
+    return {
+      type: 'season',
+      seasonIndex: seasonIdx,
+      seasonName,
+      daysCompleted,
+      cycle,
+      seasonOrder,
+      hours,
+      avgDemand,
+      avgSupply,
+      demandMWh,
+      supplyMWh,
+      deliveredMWh,
+      unservedMWh,
+      servedPct,
+      revenue: seasonTotals.revenue,
+      opex: seasonTotals.opex,
+      income: seasonTotals.income,
+      avgDailyIncome,
+      emissions: seasonTotals.emissions,
+      peakDemand: seasonTotals.maxDemand,
+      peakSupply: seasonTotals.maxSupply
+    };
+  }
+
+  function renderMetrics(target, metrics){
+    if(!target) return;
+    target.innerHTML = metrics.map(metric=>{
+      const note = metric.note ? `<span class="note">${metric.note}</span>` : '';
+      return `<div class="period-metric"><span class="label">${metric.label}</span><span class="value">${metric.value}</span>${note}</div>`;
+    }).join('');
+  }
+
+  function renderDailyReport(summary){
+    if(!summary) return;
+    applySeasonSkin(dailyReportPanel, summary.seasonName);
+    if(dailyReportTitleEl) dailyReportTitleEl.textContent = 'Daily Report';
+    if(dailyReportSubtitleEl) dailyReportSubtitleEl.textContent = `${summary.seasonName} — Day ${summary.dayNumber}`;
+    if(dailyReportLeadEl){
+      const details = [
+        `${formatEnergy(summary.deliveredMWh)} delivered of ${formatEnergy(summary.demandMWh)} demand`,
+        `${formatPercent(summary.servedPct)} served`
+      ];
+      if(Number.isFinite(summary.peakDemand) && summary.peakDemand>0){
+        details.push(`Peak ${fmt(Math.round(summary.peakDemand))} MW`);
+      }
+      dailyReportLeadEl.textContent = details.join(' • ');
+    }
+    const emissionsValue = Number.isFinite(summary.emissions) ? summary.emissions : 0;
+    renderMetrics(dailyReportMetricsEl, [
+      { label:'Avg Demand', value:`${fmt(Math.round(summary.avgDemand))} MW` },
+      { label:'Avg Supply', value:`${fmt(Math.round(summary.avgSupply))} MW` },
+      { label:'Energy Delivered', value:formatEnergy(summary.deliveredMWh), note:`${formatPercent(summary.servedPct)} served` },
+      { label:'Unserved Energy', value:formatEnergy(summary.unservedMWh) },
+      { label:'Revenue', value:formatMoney(summary.revenue) },
+      { label:'OPEX', value:formatMoney(summary.opex) },
+      { label:'Net Income', value:formatMoney(summary.income, { signed:true }) },
+      { label:'Emissions', value:`${emissionsValue.toFixed(1)} t` }
+    ]);
+  }
+
+  function renderSeasonReport(summary){
+    if(!summary) return;
+    applySeasonSkin(seasonReportPanel, summary.seasonName);
+    if(seasonReportTitleEl) seasonReportTitleEl.textContent = 'Season Summary';
+    if(seasonReportSubtitleEl){
+      seasonReportSubtitleEl.textContent = `${summary.seasonName} • Year ${summary.cycle} (${summary.daysCompleted} days)`;
+    }
+    if(seasonReportLeadEl){
+      const details = [
+        `${formatEnergy(summary.deliveredMWh)} delivered of ${formatEnergy(summary.demandMWh)} demand`,
+        `${formatPercent(summary.servedPct)} served`
+      ];
+      if(Number.isFinite(summary.peakDemand) && summary.peakDemand>0){
+        details.push(`Peak ${fmt(Math.round(summary.peakDemand))} MW`);
+      }
+      seasonReportLeadEl.textContent = details.join(' • ');
+    }
+    const emissionsValue = Number.isFinite(summary.emissions) ? summary.emissions : 0;
+    renderMetrics(seasonReportMetricsEl, [
+      { label:'Avg Demand', value:`${fmt(Math.round(summary.avgDemand))} MW` },
+      { label:'Avg Supply', value:`${fmt(Math.round(summary.avgSupply))} MW` },
+      { label:'Energy Delivered', value:formatEnergy(summary.deliveredMWh), note:`${formatPercent(summary.servedPct)} served` },
+      { label:'Unserved Energy', value:formatEnergy(summary.unservedMWh) },
+      { label:'Revenue', value:formatMoney(summary.revenue) },
+      { label:'OPEX', value:formatMoney(summary.opex) },
+      { label:'Net Income', value:formatMoney(summary.income, { signed:true }) },
+      { label:'Avg Daily Income', value:formatMoney(summary.avgDailyIncome, { signed:true }) },
+      { label:'Emissions', value:`${emissionsValue.toFixed(1)} t` }
+    ]);
+  }
+
+  function buildPeriodLogItem(entry, type){
+    if(type==='daily'){
+      const heading = `${entry.seasonName} Day ${entry.dayNumber}`;
+      const details = [
+        `${formatPercent(entry.servedPct)} served`,
+        `Income ${formatMoney(entry.income, { signed:true })}`,
+        `Revenue ${formatMoney(entry.revenue)}`,
+        `OPEX ${formatMoney(entry.opex)}`,
+        `Energy ${formatEnergy(entry.deliveredMWh)}`
+      ];
+      return `<li class="period-log-item"><div class="period-log-title">${heading}</div><div class="period-log-body">${details.join(' • ')}</div></li>`;
+    }
+    const heading = `${entry.seasonName} • Year ${entry.cycle}`;
+    const details = [
+      `${entry.daysCompleted} days`,
+      `${formatPercent(entry.servedPct)} served`,
+      `Income ${formatMoney(entry.income, { signed:true })}`,
+      `Avg day ${formatMoney(entry.avgDailyIncome, { signed:true })}`,
+      `Energy ${formatEnergy(entry.deliveredMWh)}`
+    ];
+    return `<li class="period-log-item"><div class="period-log-title">${heading}</div><div class="period-log-body">${details.join(' • ')}</div></li>`;
+  }
+
+  function renderPeriodLog(entries, targetEl, emptyEl, type){
+    if(!targetEl) return;
+    if(!Array.isArray(entries) || entries.length===0){
+      targetEl.innerHTML = '';
+      if(emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+    if(emptyEl) emptyEl.style.display = 'none';
+    const items = [...entries].reverse().map(entry=> buildPeriodLogItem(entry, type)).join('');
+    targetEl.innerHTML = items;
+  }
+
+  function renderDailyLog(){
+    renderPeriodLog(dailyLogEntries, dailyReportLogEl, dailyReportEmptyEl, 'daily');
+  }
+
+  function renderSeasonLog(){
+    renderPeriodLog(seasonLogEntries, seasonReportLogEl, seasonReportEmptyEl, 'season');
+  }
+
+  function finalizeDailyPeriod(seasonIdx, dayNumber){
+    const summary = buildDailySummary(seasonIdx, dayNumber);
+    if(!summary) return false;
+    dailyLogEntries.push(summary);
+    renderDailyLog();
+    renderDailyReport(summary);
+    openModal('#dailyReportModal');
+    return true;
+  }
+
+  function finalizeSeasonPeriod(seasonIdx, daysCompleted){
+    const summary = buildSeasonSummary(seasonIdx, daysCompleted);
+    if(!summary) return false;
+    seasonLogEntries.push(summary);
+    renderSeasonLog();
+    renderSeasonReport(summary);
+    openModal('#seasonReportModal');
+    totalSeasonsCompleted += 1;
+    return true;
+  }
+
+  function showLatestDailyReport(){
+    if(!dailyLogEntries.length){
+      toastMsg('No daily reports yet.');
+      return;
+    }
+    const latest = dailyLogEntries[dailyLogEntries.length-1];
+    renderDailyReport(latest);
+    renderDailyLog();
+    openModal('#dailyReportModal');
+  }
+
+  function showLatestSeasonReport(){
+    if(!seasonLogEntries.length){
+      toastMsg('No seasonal reports yet.');
+      return;
+    }
+    const latest = seasonLogEntries[seasonLogEntries.length-1];
+    renderSeasonReport(latest);
+    renderSeasonLog();
+    openModal('#seasonReportModal');
   }
 
 // Function: updateBuildQueue() — purpose: [describe]. Returns: [value/void].
@@ -1354,6 +1729,8 @@ function updateGasFleetUI(){
 
 // UI: Event listener for 'click'
   el('#howto').addEventListener('click', ()=> openModal('#modalHowto'));
+  if(openDailyReportBtn) openDailyReportBtn.addEventListener('click', showLatestDailyReport);
+  if(openSeasonReportBtn) openSeasonReportBtn.addEventListener('click', showLatestSeasonReport);
 // UI: Event listener for 'click'
   els('.close').forEach(btn=> btn.addEventListener('click', ()=> closeModal(btn.getAttribute('data-close'))));
 // UI: Event listener for 'click'

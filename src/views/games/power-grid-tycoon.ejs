@@ -14,7 +14,7 @@
 <body class="bg-white dark:bg-gray-900 min-h-screen">
         <%- include('../partials/navbar') %>
 
-        <div id="seasonHud" class="hud-panel" aria-live="polite">
+        <div id="seasonHud" class="hud-panel season-themed season-theme--spring" aria-live="polite">
                 <div class="hud-header">
                         <span id="hudSeason" class="hud-season">Spring</span>
                         <div class="hud-time">
@@ -55,14 +55,16 @@
 						<option value="normal" selected>Normal</option>
 						<option value="hard">Hard</option>
 					</select>
-					<select id="speed">
-						<option value="1">1×</option>
-						<option value="2">2×</option>
-						<option value="4">4×</option>
-					</select>
-					<button id="howto" class="btn">How to Play</button>
-					<a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
-				</div>
+                                        <select id="speed">
+                                                <option value="1">1×</option>
+                                                <option value="2">2×</option>
+                                                <option value="4">4×</option>
+                                        </select>
+                                        <button id="openDailyReport" class="btn">Daily Reports</button>
+                                        <button id="openSeasonReport" class="btn">Season Reports</button>
+                                        <button id="howto" class="btn">How to Play</button>
+                                        <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
+                                </div>
 			</header>
 
 			<div id="overloadBanner" class="overload-banner" style="display:none">
@@ -262,20 +264,60 @@
 			</div>
 		</div>
 
-		<!-- Upgrades Modal -->
-		<div id="modalUpgrades" class="modal" aria-hidden="true">
-			<div class="panel">
-				<h2>Upgrades</h2>
-				<div id="upgradesArea"></div>
-				<button class="btn close" data-close="#modalUpgrades" style="margin-top:10px">Close</button>
-			</div>
-		</div>
+                <!-- Upgrades Modal -->
+                <div id="modalUpgrades" class="modal" aria-hidden="true">
+                        <div class="panel">
+                                <h2>Upgrades</h2>
+                                <div id="upgradesArea"></div>
+                                <button class="btn close" data-close="#modalUpgrades" style="margin-top:10px">Close</button>
+                        </div>
+                </div>
 
-		<!-- Game Over Modal -->
-		<div id="modalGameOver" class="modal" aria-hidden="true">
-			<div class="panel">
-				<h2 id="goTitle">Game Over</h2>
-				<p id="goMsg" class="muted"></p>
+                <!-- Daily Report Modal -->
+                <div id="dailyReportModal" class="modal period-modal" aria-hidden="true">
+                        <div id="dailyReportPanel" class="panel period-panel season-themed season-theme--spring">
+                                <div class="period-header">
+                                        <h2 id="dailyReportTitle">Daily Report</h2>
+                                        <div id="dailyReportSubtitle" class="period-subtitle">Spring — Day 1</div>
+                                </div>
+                                <div id="dailyReportLead" class="period-lead">No daily reports yet.</div>
+                                <div id="dailyReportMetrics" class="period-metrics"></div>
+                                <div class="period-log">
+                                        <div class="period-log-header">
+                                                <h3>Daily Log</h3>
+                                        </div>
+                                        <div id="dailyReportEmpty" class="period-empty">No daily reports yet. Keep the grid running to collect data.</div>
+                                        <ol id="dailyReportLog" class="period-log-list"></ol>
+                                </div>
+                                <button class="btn close" data-close="#dailyReportModal">Close</button>
+                        </div>
+                </div>
+
+                <!-- Season Report Modal -->
+                <div id="seasonReportModal" class="modal period-modal" aria-hidden="true">
+                        <div id="seasonReportPanel" class="panel period-panel season-themed season-theme--spring">
+                                <div class="period-header">
+                                        <h2 id="seasonReportTitle">Season Summary</h2>
+                                        <div id="seasonReportSubtitle" class="period-subtitle">Spring • Year 1 (0 days)</div>
+                                </div>
+                                <div id="seasonReportLead" class="period-lead">No seasonal reports yet.</div>
+                                <div id="seasonReportMetrics" class="period-metrics"></div>
+                                <div class="period-log">
+                                        <div class="period-log-header">
+                                                <h3>Season Log</h3>
+                                        </div>
+                                        <div id="seasonReportEmpty" class="period-empty">No seasonal reports yet. Complete 28 days to generate a summary.</div>
+                                        <ol id="seasonReportLog" class="period-log-list"></ol>
+                                </div>
+                                <button class="btn close" data-close="#seasonReportModal">Close</button>
+                        </div>
+                </div>
+
+                <!-- Game Over Modal -->
+                <div id="modalGameOver" class="modal" aria-hidden="true">
+                        <div class="panel">
+                                <h2 id="goTitle">Game Over</h2>
+                                <p id="goMsg" class="muted"></p>
 				<div class="hr"></div>
 				<h3>Scorecard</h3>
 				<table class="table" id="scoreTable"></table>
