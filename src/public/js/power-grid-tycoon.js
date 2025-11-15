@@ -276,25 +276,15 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     // Split gas vs. others for UI
      const gasUnits = generators.filter(g=>g.fuel==='gas');
      const others   = generators
-        .filter(g=>g.fuel!=='gas')
-        .sort((a,b)=>{
-          if(a.isBattery && b.isBattery){
-            return (a.batteryOrder??0) - (b.batteryOrder??0);
-          }
-          if(a.isBattery) return -1;
-          if(b.isBattery) return 1;
-          return a.name.localeCompare(b.name);
-        });
+        .filter(g=>g.fuel!=='gas' && !g.isBattery)
+        .sort((a,b)=> a.name.localeCompare(b.name));
      // Render non-gas as individual rows (unchanged behavior)
      for(const g of others){
        const row = document.createElement('div');
        row.className='row';
-       const tags = `<span class="tag">${g.fuel}</span>` + (g.variable?`<span class="tag">variable</span>`:'') + (g.isBattery?`<span class="tag">battery</span>`:'');
+       const tags = `<span class="tag">${g.fuel}</span>` + (g.variable?`<span class="tag">variable</span>`:'');
        const detailId = `${g.id}-detail`;
-       const pct = g.isBattery && g.energyMax>0 ? Math.round((g.energy/g.energyMax)*100) : null;
-       const detailText = g.isBattery
-         ? `Power ${g.cap} MW • Charge ${fmt(Math.round(g.energy))}/${fmt(g.energyMax)} MW${pct!==null?` (${pct}%)`:''}`
-         : `Capacity ${g.cap} MW`;
+       const detailText = `Capacity ${g.cap} MW`;
        row.innerHTML = `
          <div class="name">${g.name} ${tags} <div class="muted small" id="${detailId}">${detailText}</div></div>
          <div class="status">${g.fault?'<span class="bad">FAULT</span>':(g.enabled? (g.on?'Online':'OFF') : `Starting (${g._startRemain||g.startup}s)`)}</div>
@@ -327,12 +317,14 @@ import { computeReserveRequirement } from './reserve-requirement.js';
       const clampedPct = clamp(pct, 0, 100);
       const row = document.createElement('div');
       row.className = 'battery-status-row';
-      const statusLabel = b.on ? 'Active' : 'Disabled';
-      row.classList.toggle('battery-status-off', !b.on);
+      const statusLabel = b.fault ? 'Faulted' : 'Auto dispatch';
+      row.classList.toggle('battery-status-off', !!b.fault);
+      const actual = Number.isFinite(b.actual) ? b.actual : 0;
+      const outputText = (actual>0? '+' : (actual<0? '' : '')) + fmt(actual);
       row.innerHTML = `
         <div class="battery-status-meta">
           <div class="battery-status-name">${b.name}</div>
-          <div class="muted small">Stored ${fmt(Math.round(b.energy))}/${fmt(b.energyMax)} MW • ${statusLabel}</div>
+          <div class="muted small" id="${b.id}-battery-detail">Stored ${fmt(Math.round(b.energy))}/${fmt(b.energyMax)} MW (${clampedPct}%) • Output ${outputText} MW • ${statusLabel}</div>
         </div>
         <div class="battery-status-bar"><div class="battery-status-fill" style="width:${clampedPct}%"></div></div>
         <div class="battery-status-pct">${clampedPct}%</div>`;
