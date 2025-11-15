@@ -1,42 +1,42 @@
 // tests/services/powerGridLeaderboard.test.js
 // tests/services/powerGridLeaderboard.test.js
-import { describe, it, before, beforeEach, after } from 'node:test';
-import assert from 'node:assert/strict';
+import assert from 'assert/strict';
 import os from 'os';
 import path from 'path';
 import { promises as fsp } from 'fs';
-import { spawn } from 'node:child_process';
+import { spawn } from 'child_process';
 
 let appendLeaderboardEntry;
 let getLeaderboard;
+let clearLeaderboard;
 
 const tmpDir = path.join(os.tmpdir(), 'power-grid-tycoon-tests');
 const tmpFile = path.join(tmpDir, 'leaderboard.db');
 
-async function resetStore() {
-  // Just delete the underlying file; the service will recreate an empty store
+beforeAll(async () => {
   await fsp.rm(tmpFile, { force: true });
-}
 
-before(async () => {
   // Make sure the service points at our temp file *before* we import it
   process.env.POWER_GRID_LEADERBOARD_FILE = tmpFile;
 
   const mod = await import('../../src/services/powerGridLeaderboard.js');
   appendLeaderboardEntry = mod.appendLeaderboardEntry;
   getLeaderboard = mod.getLeaderboard;
+  clearLeaderboard = mod.clearLeaderboard;
 
   // Start from a clean file
-  await resetStore();
+  await clearLeaderboard();
 });
 
 beforeEach(async () => {
   // Each test runs against a fresh leaderboard file
-  await resetStore();
+  await clearLeaderboard();
 });
 
-after(async () => {
-  await resetStore();
+afterAll(async () => {
+  if (clearLeaderboard) {
+    await clearLeaderboard();
+  }
   await fsp.rm(tmpDir, { recursive: true, force: true });
   delete process.env.POWER_GRID_LEADERBOARD_FILE;
 });
@@ -104,13 +104,19 @@ describe('powerGridLeaderboard service', () => {
       new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [scriptUrl.pathname, String(i)], {
           env: { ...process.env, POWER_GRID_LEADERBOARD_FILE: tmpFile },
-          stdio: 'ignore',
+          stdio: ['ignore', 'ignore', 'pipe'],
+        });
+
+        let stderr = '';
+        child.stderr.setEncoding('utf-8');
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk;
         });
 
         child.on('error', reject);
         child.on('exit', (code) => {
           if (code === 0) resolve();
-          else reject(new Error(`Child exited with code ${code}`));
+          else reject(new Error(`Child exited with code ${code}: ${stderr.trim()}`));
         });
       }),
     );

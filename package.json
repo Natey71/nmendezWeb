@@ -6,7 +6,7 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "test": "jest",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "build": "tailwindcss -i ./src/public/css/style.css -o ./src/public/css/output.css"
@@ -19,10 +19,7 @@
     "moduleDirectories": [
       "node_modules",
       "src"
-    ],
-    "moduleNameMapper": {
-      "^node:(.*)$": "$1"
-    }
+    ]
   },
   "repository": {
     "type": "git",

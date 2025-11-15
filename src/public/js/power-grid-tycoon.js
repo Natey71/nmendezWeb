@@ -7,7 +7,7 @@
 */
 
 import { applyEventAdjustments, finalizeSupplyDemandBalance } from './power-grid-sim-core.js';
-import { createAceDeadbandTracker } from './ace-deadband.js';
+import { createSupplyDemandToleranceTracker } from './supply-demand-tolerance.js';
 import { computeReserveRequirement } from './reserve-requirement.js';
 
 (function(){
@@ -178,12 +178,12 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     hard:   { noise: 9, mismatchHzFactor: 0.026, payoutMul: 0.9 }
   };
 
-  const ACE_CONFIG = {
-    baseTolerance: 2,
-    levels: [
-      { name: 'large', threshold: 12, duration: 30 },
-      { name: 'medium', threshold: 7, duration: 45 },
-      { name: 'small', threshold: 3, duration: 90 }
+  const SUPPLY_DEMAND_TOLERANCE = {
+    baseTolerancePct: 0,
+    bands: [
+      { name: 'major oversupply', direction: 'oversupply', minPct: 0.13, maxPct: 0.18, duration: 45 },
+      { name: 'moderate oversupply', direction: 'oversupply', minPct: 0.08, maxPct: 0.12, duration: 60 },
+      { name: 'deficit', direction: 'undersupply', minPct: 0.08, maxPct: 0.08, duration: 90 }
     ]
   };
 
@@ -233,7 +233,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
 
-  const aceTracker = createAceDeadbandTracker(ACE_CONFIG);
+  const mismatchTracker = createSupplyDemandToleranceTracker(SUPPLY_DEMAND_TOLERANCE);
 
   // Entities
   let generators = [];
@@ -307,7 +307,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     const initYear = Math.floor(totalSeasonsCompleted / SEASONS.length) + 1;
     if(seasonReportSubtitleEl) seasonReportSubtitleEl.textContent = `${SEASONS[seasonIndex]} • Year ${initYear} (0 days)`;
     overloadActive=false; overloadRemain=0; overloadReason='';
-    aceTracker.reset();
+    mismatchTracker.reset();
     els('.modal').forEach(m=>m.style.display='none');
 
     renderGenList(); renderCustList(); renderBuildables(); renderUpgrades();
@@ -1043,19 +1043,15 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     else rep = clamp(rep - 0.15, 0, 110);
 
     // 6) Safety / overload (replace instant stop with 45s warning window)
-    const aceMismatch = deficit>0 ? -deficit : (oversupplyBeyondReserve>0 ? oversupplyBeyondReserve : 0);
-    const aceResult = aceTracker.step(aceMismatch);
-    const frequencyUnsafe = freq<SAFE_HZ_MIN || freq>SAFE_HZ_MAX;
-    const unsafe = frequencyUnsafe || aceResult.triggered;
+    const imbalanceResult = mismatchTracker.step({ demand, supply });
+    const unsafe = imbalanceResult.triggered;
     if(unsafe){
-      let reason = '';
-      if(frequencyUnsafe){
-        reason = `frequency ${freq.toFixed(2)} Hz`;
-      }else{
-        const band = aceResult.activeLevel?.name || 'imbalance';
-        const direction = aceMismatch<0 ? 'deficit' : 'oversupply';
-        reason = `sustained ${direction} (${band} band)`;
-      }
+      const band = imbalanceResult.activeLevel?.name || 'imbalance';
+      const direction = imbalanceResult.activeLevel?.direction === 'undersupply' ? 'deficit' : 'oversupply';
+      const pct = Math.abs(imbalanceResult.mismatchRatio) * 100;
+      const pctText = Number.isFinite(pct) ? `${pct.toFixed(1)}%` : '';
+      const durationLabel = imbalanceResult.activeLevel?.duration ? `${imbalanceResult.activeLevel.duration}s band` : 'band';
+      const reason = pctText ? `sustained ${direction} (${band}, ${pctText} mismatch ${durationLabel})` : `sustained ${direction} (${band})`;
       setOverload(true, reason);
     }
     tickOverloadCountdown(unsafe);
