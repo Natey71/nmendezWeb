@@ -89,6 +89,9 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   let leaderboardEntries = [];
   let latestResult = null;
   let leaderboardSaving = false;
+  const TELEMETRY_VERSION = 1;
+  const MAX_TELEMETRY_FRAMES = 3600;
+  let runTelemetry = [];
 
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
@@ -132,7 +135,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     t=0; day=1; secondsInDay=6*60; // start at 06:00
     freq=TARGET_HZ; price=80; cash=250000; rep=50;
     totalDeliveredMWh=0; totalEmissionsT=0; totalOpex=0; totalRevenue=0; profit=0;
-    uptimeTicks=0; ticks=0; history=[];
+    uptimeTicks=0; ticks=0; history=[]; runTelemetry=[]; latestResult=null;
     overloadActive=false; overloadRemain=0; overloadReason='';
     aceTracker.reset();
     els('.modal').forEach(m=>m.style.display='none');
@@ -789,10 +792,47 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     maybeEvent();
     cleanupEvents();
 
-    // 9) UI
+    // 9) Telemetry + UI
+    recordTelemetryFrame({ demand, supply, price, freq, tickHours });
     updateUI(demand, supply, rawBalance, reserveMW);
     pushHistory(demand, supply, rawBalance, freq);
     drawHistory();
+  }
+
+  function recordTelemetryFrame({ demand, supply, price, freq, tickHours }){
+    if(runTelemetry.length >= MAX_TELEMETRY_FRAMES) return;
+    const toNumber = (value, fallback = 0)=>{
+      const num = Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    };
+    const sanitizedTickHours = toNumber(tickHours, 0);
+    if(sanitizedTickHours <= 0) return;
+    const frame = {
+      tick: ticks,
+      demand: toNumber(demand, 0),
+      supply: toNumber(supply, 0),
+      price: toNumber(price, 0),
+      freq: toNumber(freq, TARGET_HZ),
+      tickHours: Number(sanitizedTickHours.toFixed(6)),
+      fuelMultipliers: {
+        coal: toNumber(fuelMultipliers.coal, 1),
+        gas: toNumber(fuelMultipliers.gas, 1)
+      },
+      generators: generators.map(g=>({
+        id: g.id,
+        fuel: g.fuel,
+        cap: toNumber(g.cap, 0),
+        actual: toNumber(g.actual, 0),
+        on: !!g.on,
+        enabled: !!g.enabled,
+        variable: !!g.variable,
+        fault: !!g.fault,
+        isBattery: !!g.isBattery,
+        opex: toNumber(g.opex, 0),
+        co2: toNumber(g.co2, 0)
+      }))
+    };
+    runTelemetry.push(frame);
   }
 
 // Function: updateBuildQueue() — purpose: [describe]. Returns: [value/void].
@@ -940,12 +980,7 @@ function updateGasFleetUI(){
       tr.innerHTML = `<th>${r[0]}</th><td>${r[1]}</td>`;
       st.appendChild(tr);
     });
-    prepareLeaderboardSave({
-      score,
-      profit,
-      uptime: ticks?Math.round(100*uptimeTicks/ticks):0,
-      emissions: Math.round(totalEmissionsT)
-    });
+    prepareLeaderboardSave();
     renderLeaderboard();
     loadLeaderboard();
     el('#goTitle').textContent = victory?'You made it!':'Game Over';
@@ -994,20 +1029,34 @@ function updateGasFleetUI(){
     if(tone==='success') leaderSaveStatus.classList.add('good');
   }
 
-  function prepareLeaderboardSave(result){
-    latestResult = result;
+  function prepareLeaderboardSave(){
+    latestResult = buildRunExport();
     leaderboardSaving = false;
-    setLeaderboardStatus(result ? 'Enter a name to save your score.' : 'Finish a run to save your score.');
+    const hasResult = !!latestResult;
+    setLeaderboardStatus(hasResult ? 'Enter a name to save your score.' : 'Finish a run to save your score.');
     if(!leaderNameInput || !leaderSaveBtn) return;
     leaderNameInput.value = '';
     leaderSaveBtn.textContent = 'Save Score';
-    if(result){
+    if(hasResult){
       leaderNameInput.disabled = false;
       leaderSaveBtn.disabled = false;
     }else{
       leaderNameInput.disabled = true;
       leaderSaveBtn.disabled = true;
     }
+  }
+
+  function buildRunExport(){
+    if(!runTelemetry.length) return null;
+    return {
+      version: TELEMETRY_VERSION,
+      difficulty,
+      frames: runTelemetry.map(frame=>({
+        ...frame,
+        fuelMultipliers: { ...frame.fuelMultipliers },
+        generators: frame.generators.map(g=>({ ...g }))
+      }))
+    };
   }
 
   async function saveLeaderboardEntry(){
@@ -1022,8 +1071,8 @@ function updateGasFleetUI(){
     leaderSaveBtn.textContent = 'Saving...';
     setLeaderboardStatus('Saving score...');
     const payload = {
-      ...latestResult,
-      name: leaderNameInput ? leaderNameInput.value.trim() : ''
+      name: leaderNameInput ? leaderNameInput.value.trim() : '',
+      run: latestResult
     };
     try{
       const res = await fetch('/games/power-grid-tycoon/leaderboard', {
@@ -1036,6 +1085,7 @@ function updateGasFleetUI(){
       leaderboardEntries = Array.isArray(data?.entries)?data.entries:leaderboardEntries;
       renderLeaderboard();
       latestResult = null;
+      runTelemetry = [];
       setLeaderboardStatus('Saved! Thanks for playing.', 'success');
       if(leaderNameInput) leaderNameInput.disabled = true;
       leaderSaveBtn.textContent = 'Saved';
