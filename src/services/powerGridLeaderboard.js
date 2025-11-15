@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 const configuredDbFile = process.env.POWER_GRID_LEADERBOARD_FILE
   ? path.resolve(process.env.POWER_GRID_LEADERBOARD_FILE)
-  : path.join(__dirname, '..', 'data', 'power-grid-tycoon-leaderboard.db');
+  : path.join(__dirname, '..', 'data', 'power-grid-tycoon', 'leaderboard.db');
 
 const dbDirectory = path.dirname(configuredDbFile);
 fs.mkdirSync(dbDirectory, { recursive: true });
@@ -91,7 +91,38 @@ runSql(`
 `);
 
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+async function loadEntries() {
+  try {
+    const raw = await fs.readFile(dataFile, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
+async function saveEntries(entries) {
+  await fs.writeFile(dataFile, JSON.stringify(entries, null, 2), 'utf-8');
+}
+
+let queue = Promise.resolve();
+
+function enqueueSerialized(operation) {
+  const run = queue.then(() => operation(), () => operation());
+  queue = run.catch(() => {});
+  return run;
+}
+
+function runWithExclusiveAccess(operation) {
+  return enqueueSerialized(() => withFileLock(operation));
+}
+
+// ⬇️ Add this new function
+export async function clearLeaderboard() {
+  return runWithExclusiveAccess(async () => {
+    await saveEntries([]);
+  });
+}
 function sanitizeComputedEntry(raw) {
   if (!raw || typeof raw !== 'object') {
     throw new Error('Computed leaderboard entry is required.');
