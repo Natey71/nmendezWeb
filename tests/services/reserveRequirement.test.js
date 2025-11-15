@@ -1,6 +1,5 @@
 // tests/services/reserveRequirement.test.js
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import assert from 'assert/strict';
 import { computeReserveRequirement } from '../../src/public/js/reserve-requirement.js';
 
 describe('computeReserveRequirement', () => {

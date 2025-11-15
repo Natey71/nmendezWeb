@@ -33,7 +33,7 @@ function serializeParam(value) {
 }
 
 function runSql(sql, params = {}, { json = false } = {}) {
-	const commands = ['.bail on', '.parameter clear'];
+        const commands = ['.bail on', '.parameter clear', '.timeout 5000'];
 
 	for (const [key, value] of Object.entries(params)) {
 		commands.push(`.parameter set @${key} ${serializeParam(value)}`);
@@ -43,7 +43,7 @@ function runSql(sql, params = {}, { json = false } = {}) {
 		commands.push('.mode json');
 	}
 
-	const script = `${commands.join('\n')}\n${sql}\n`;
+        const script = `${commands.join('\n')}\n${sql}\n`;
 
 	const result = spawnSync('sqlite3', ['-batch', configuredDbFile], {
 		input: script,
