@@ -6,6 +6,10 @@
      - Search for 'SECTION' or 'Function' to jump around.
 */
 
+import { applyEventAdjustments, finalizeSupplyDemandBalance } from './power-grid-sim-core.js';
+import { createAceDeadbandTracker } from './ace-deadband.js';
+import { computeReserveRequirement } from './reserve-requirement.js';
+
 (function(){
   // ---------- Utilities ----------
   const el = q => document.querySelector(q);
@@ -40,7 +44,6 @@
   const HISTORY_LEN = 60;           // seconds for chart
 
   // Alterations per request
-  const RESERVE_PCT = 0.18;         // up to +18% oversupply allowed as reserve
   const OVERLOAD_GRACE = 45;        // 45s grace to fix overload instead of instant stop
 
 // SECTION: Configuration object `DIFFICULTY` — tweak constants/knobs here
@@ -48,6 +51,15 @@
     easy:   { noise: 3, mismatchHzFactor: 0.013, payoutMul: 1.0 },
     normal: { noise: 6, mismatchHzFactor: 0.018, payoutMul: 1.0 },
     hard:   { noise: 9, mismatchHzFactor: 0.026, payoutMul: 0.9 }
+  };
+
+  const ACE_CONFIG = {
+    baseTolerance: 2,
+    levels: [
+      { name: 'large', threshold: 12, duration: 30 },
+      { name: 'medium', threshold: 7, duration: 45 },
+      { name: 'small', threshold: 3, duration: 90 }
+    ]
   };
 
   // Buildable definitions
@@ -77,9 +89,14 @@
   let leaderboardEntries = [];
   let latestResult = null;
   let leaderboardSaving = false;
+  const TELEMETRY_VERSION = 1;
+  const MAX_TELEMETRY_FRAMES = 3600;
+  let runTelemetry = [];
 
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
+
+  const aceTracker = createAceDeadbandTracker(ACE_CONFIG);
 
   // Entities
   let generators = [];
@@ -118,12 +135,13 @@
     t=0; day=1; secondsInDay=6*60; // start at 06:00
     freq=TARGET_HZ; price=80; cash=250000; rep=50;
     totalDeliveredMWh=0; totalEmissionsT=0; totalOpex=0; totalRevenue=0; profit=0;
-    uptimeTicks=0; ticks=0; history=[];
+    uptimeTicks=0; ticks=0; history=[]; runTelemetry=[]; latestResult=null;
     overloadActive=false; overloadRemain=0; overloadReason='';
+    aceTracker.reset();
     els('.modal').forEach(m=>m.style.display='none');
 
     renderGenList(); renderCustList(); renderBuildables(); renderUpgrades();
-    updateUI(0,0,0); drawHistory();
+    updateUI(0,0,0,0); drawHistory();
     setButtons();
     toastMsg('Ready. Build your grid.');
   }
@@ -385,31 +403,42 @@
   }
 
   // ---------- Demand Model ----------
+  function demandProfileMultiplier(c, hour){
+    switch(c.profile){
+      case 'evening-peaker':
+        return 0.65 + 0.55*peak(hour, 18, 22) + 0.25*peak(hour,6,8);
+      case 'business-hours':
+        return 0.3 + 0.9*peak(hour,9,18);
+      case 'flat':
+        return 1.0;
+      case 'factory':
+        return 0.6 + 0.5*peak(hour,7,19);
+      case 'town':
+        return 0.55 + 0.65*peak(hour,18,23) + 0.15*peak(hour,6,8);
+      default:
+        return 1.0;
+    }
+  }
+
   function demandOfCustomer(c, sec){
     const h = (sec % DAY_SECONDS) / DAY_SECONDS * 24; // hour 0..24
-    let shape=1;
-    switch(c.profile){
-      case 'evening-peaker': // homes
-        shape = 0.65 + 0.55*peak(h, 18, 22) + 0.25*peak(h,6,8);
-        break;
-      case 'business-hours': // store/office
-        shape = 0.3 + 0.9*peak(h,9,18);
-        break;
-      case 'flat': // datacenter
-        shape = 1.0;
-        break;
-      case 'factory':
-        shape = 0.6 + 0.5*peak(h,7,19);
-        break;
-      case 'town':
-        shape = 0.55 + 0.65*peak(h,18,23) + 0.15*peak(h,6,8);
-        break;
-      default: shape=1.0;
-    }
+    const shape = demandProfileMultiplier(c, h);
     const noise = rand(-0.06,0.06) * DIFFICULTY[difficulty].noise/6;
     let mw = c.baseMW * shape * c.volatility * (1+noise) * (c.connected?1:0);
     mw = clamp(mw, 0, c.baseMW*1.8);
     return mw;
+  }
+
+  function forecastDemandAt(secondsAhead){
+    const sec = (secondsAhead % DAY_SECONDS + DAY_SECONDS) % DAY_SECONDS;
+    const hour = (sec / DAY_SECONDS) * 24;
+    let total = 0;
+    for(const c of customers){
+      const shape = demandProfileMultiplier(c, hour);
+      const mw = c.baseMW * shape * c.volatility * (c.connected?1:0);
+      total += clamp(mw, 0, c.baseMW*1.8);
+    }
+    return Math.round(total);
   }
 // Function: peak(hour, start, end) — purpose: [describe]. Returns: [value/void].
   function peak(hour, start, end){
@@ -597,21 +626,6 @@
     if(e.type==='heat'){ toastMsg('Heat wave: residential & commercial demand up.'); }
   }
 // Function: applyEventEffects(demand) — purpose: [describe]. Returns: [value/void].
-  function applyEventEffects(demand){
-    let d = demand;
-    for(const ev of events){
-      if(ev.type==='storm'){
-        for(const g of generators){
-          if(g.fuel==='wind') g.actual = Math.round(g.actual*0.55);
-          if(g.fuel==='solar') g.actual = Math.round(g.actual*0.7);
-        }
-      }
-      if(ev.type==='heat'){
-        d *= 1.08;
-      }
-    }
-    return d;
-  }
 // Function: cleanupEvents() — purpose: [describe]. Returns: [value/void].
   function cleanupEvents(){
     events = events.filter(e=>{
@@ -673,19 +687,39 @@
     updateRenewables(secondsInDay);
     updateThermalAndBattery();
 
-    // Supply before battery
-    let supply = generators.reduce((s,g)=> s + Math.max(0,g.actual||0), 0);
-    // Battery reacts
-    const adjusted = batteryDispatch(supply - demand);
-    supply += adjusted;
+    // Apply event effects before finalizing supply and battery response
+    const generatorSnapshots = generators.map(g=>({...g}));
+    const adjustedDemandPreview = applyEventAdjustments({
+      demand,
+      generators: generatorSnapshots,
+      events
+    });
 
-    // Apply event effects (may modify renewable output and demand)
-    demand = Math.round(applyEventEffects(demand));
+    const baseReserveRatio = 0.12 + (DIFFICULTY[difficulty]?.mismatchHzFactor || 0) * 0.5;
+    const reserveTarget = computeReserveRequirement({
+      adjustedDemand: adjustedDemandPreview,
+      generators: generatorSnapshots,
+      forecastDemandFn: (offset)=> forecastDemandAt(secondsInDay + offset),
+      baseReserveRatio
+    });
+
+    const balance = finalizeSupplyDemandBalance({
+      demand,
+      generators,
+      events,
+      reserveMW: reserveTarget,
+      batteryDispatch: batteryDispatch
+    });
+
+    demand = balance.demand;
+    let supply = balance.supply;
+    const rawBalance = balance.rawBalance;
+    const oversupply = balance.oversupply;
+    const reserveMW = balance.reserveMW;
+    const oversupplyBeyondReserve = balance.oversupplyBeyondReserve;
+    const deficit = balance.deficit;
 
     // 3) Frequency dynamics with reserve band
-    const reserveMW = Math.round(demand * RESERVE_PCT);
-    const rawBalance = supply - demand;
-    const oversupply = Math.max(0, rawBalance);
     const effectiveBalance = oversupply>0 ? Math.max(0, oversupply - reserveMW) : rawBalance; // ignore reserve oversupply
     const df = effectiveBalance * DIFFICULTY[difficulty].mismatchHzFactor;
     const relax = (TARGET_HZ - freq) * 0.06;
@@ -726,12 +760,19 @@
     else rep = clamp(rep - 0.15, 0, 110);
 
     // 6) Safety / overload (replace instant stop with 45s warning window)
-    const deficit = demand - supply;
-    const oversupplyBeyondReserve = Math.max(0, oversupply - reserveMW);
-    const unsafe = (freq<SAFE_HZ_MIN || freq>SAFE_HZ_MAX || deficit>0 || oversupplyBeyondReserve>0);
+    const aceMismatch = deficit>0 ? -deficit : (oversupplyBeyondReserve>0 ? oversupplyBeyondReserve : 0);
+    const aceResult = aceTracker.step(aceMismatch);
+    const frequencyUnsafe = freq<SAFE_HZ_MIN || freq>SAFE_HZ_MAX;
+    const unsafe = frequencyUnsafe || aceResult.triggered;
     if(unsafe){
-      const reason = freq<SAFE_HZ_MIN||freq>SAFE_HZ_MAX ? `frequency ${freq.toFixed(2)} Hz` :
-                     (deficit>0 ? 'prolonged deficit' : 'excess oversupply beyond reserve');
+      let reason = '';
+      if(frequencyUnsafe){
+        reason = `frequency ${freq.toFixed(2)} Hz`;
+      }else{
+        const band = aceResult.activeLevel?.name || 'imbalance';
+        const direction = aceMismatch<0 ? 'deficit' : 'oversupply';
+        reason = `sustained ${direction} (${band} band)`;
+      }
       setOverload(true, reason);
     }
     tickOverloadCountdown(unsafe);
@@ -751,10 +792,47 @@
     maybeEvent();
     cleanupEvents();
 
-    // 9) UI
-    updateUI(demand, supply, rawBalance);
+    // 9) Telemetry + UI
+    recordTelemetryFrame({ demand, supply, price, freq, tickHours });
+    updateUI(demand, supply, rawBalance, reserveMW);
     pushHistory(demand, supply, rawBalance, freq);
     drawHistory();
+  }
+
+  function recordTelemetryFrame({ demand, supply, price, freq, tickHours }){
+    if(runTelemetry.length >= MAX_TELEMETRY_FRAMES) return;
+    const toNumber = (value, fallback = 0)=>{
+      const num = Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    };
+    const sanitizedTickHours = toNumber(tickHours, 0);
+    if(sanitizedTickHours <= 0) return;
+    const frame = {
+      tick: ticks,
+      demand: toNumber(demand, 0),
+      supply: toNumber(supply, 0),
+      price: toNumber(price, 0),
+      freq: toNumber(freq, TARGET_HZ),
+      tickHours: Number(sanitizedTickHours.toFixed(6)),
+      fuelMultipliers: {
+        coal: toNumber(fuelMultipliers.coal, 1),
+        gas: toNumber(fuelMultipliers.gas, 1)
+      },
+      generators: generators.map(g=>({
+        id: g.id,
+        fuel: g.fuel,
+        cap: toNumber(g.cap, 0),
+        actual: toNumber(g.actual, 0),
+        on: !!g.on,
+        enabled: !!g.enabled,
+        variable: !!g.variable,
+        fault: !!g.fault,
+        isBattery: !!g.isBattery,
+        opex: toNumber(g.opex, 0),
+        co2: toNumber(g.co2, 0)
+      }))
+    };
+    runTelemetry.push(frame);
   }
 
 // Function: updateBuildQueue() — purpose: [describe]. Returns: [value/void].
@@ -780,10 +858,9 @@
   }
 
   // ---------- UI ----------
-  function updateUI(demand, supply, balance){
+  function updateUI(demand, supply, balance, reserveMW=0){
     demandEl.textContent = fmt(demand);
     supplyEl.textContent = fmt(supply);
-    const reserveMW = Math.round(demand * RESERVE_PCT);
     const reserveText = (balance>0 && balance<=reserveMW) ? ' (reserve)' : '';
     balanceEl.textContent = (balance>0?'+':'') + fmt(balance) + reserveText;
     freqEl.textContent = freq.toFixed(2);
@@ -903,12 +980,7 @@ function updateGasFleetUI(){
       tr.innerHTML = `<th>${r[0]}</th><td>${r[1]}</td>`;
       st.appendChild(tr);
     });
-    prepareLeaderboardSave({
-      score,
-      profit,
-      uptime: ticks?Math.round(100*uptimeTicks/ticks):0,
-      emissions: Math.round(totalEmissionsT)
-    });
+    prepareLeaderboardSave();
     renderLeaderboard();
     loadLeaderboard();
     el('#goTitle').textContent = victory?'You made it!':'Game Over';
@@ -957,20 +1029,34 @@ function updateGasFleetUI(){
     if(tone==='success') leaderSaveStatus.classList.add('good');
   }
 
-  function prepareLeaderboardSave(result){
-    latestResult = result;
+  function prepareLeaderboardSave(){
+    latestResult = buildRunExport();
     leaderboardSaving = false;
-    setLeaderboardStatus(result ? 'Enter a name to save your score.' : 'Finish a run to save your score.');
+    const hasResult = !!latestResult;
+    setLeaderboardStatus(hasResult ? 'Enter a name to save your score.' : 'Finish a run to save your score.');
     if(!leaderNameInput || !leaderSaveBtn) return;
     leaderNameInput.value = '';
     leaderSaveBtn.textContent = 'Save Score';
-    if(result){
+    if(hasResult){
       leaderNameInput.disabled = false;
       leaderSaveBtn.disabled = false;
     }else{
       leaderNameInput.disabled = true;
       leaderSaveBtn.disabled = true;
     }
+  }
+
+  function buildRunExport(){
+    if(!runTelemetry.length) return null;
+    return {
+      version: TELEMETRY_VERSION,
+      difficulty,
+      frames: runTelemetry.map(frame=>({
+        ...frame,
+        fuelMultipliers: { ...frame.fuelMultipliers },
+        generators: frame.generators.map(g=>({ ...g }))
+      }))
+    };
   }
 
   async function saveLeaderboardEntry(){
@@ -985,8 +1071,8 @@ function updateGasFleetUI(){
     leaderSaveBtn.textContent = 'Saving...';
     setLeaderboardStatus('Saving score...');
     const payload = {
-      ...latestResult,
-      name: leaderNameInput ? leaderNameInput.value.trim() : ''
+      name: leaderNameInput ? leaderNameInput.value.trim() : '',
+      run: latestResult
     };
     try{
       const res = await fetch('/games/power-grid-tycoon/leaderboard', {
@@ -999,6 +1085,7 @@ function updateGasFleetUI(){
       leaderboardEntries = Array.isArray(data?.entries)?data.entries:leaderboardEntries;
       renderLeaderboard();
       latestResult = null;
+      runTelemetry = [];
       setLeaderboardStatus('Saved! Thanks for playing.', 'success');
       if(leaderNameInput) leaderNameInput.disabled = true;
       leaderSaveBtn.textContent = 'Saved';

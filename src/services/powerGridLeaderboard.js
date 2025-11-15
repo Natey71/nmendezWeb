@@ -5,8 +5,12 @@ import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dataDir = path.join(__dirname, '..', 'data');
-const dataFile = path.join(dataDir, 'power-grid-tycoon-leaderboard.json');
+const configuredDataFile = process.env.POWER_GRID_LEADERBOARD_FILE
+  ? path.resolve(process.env.POWER_GRID_LEADERBOARD_FILE)
+  : null;
+const defaultDataDir = path.join(__dirname, '..', 'data');
+const dataFile = configuredDataFile || path.join(defaultDataDir, 'power-grid-tycoon-leaderboard.json');
+const dataDir = path.dirname(dataFile);
 
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
@@ -34,20 +38,32 @@ async function saveEntries(entries) {
   await fs.writeFile(dataFile, JSON.stringify(entries, null, 2), 'utf-8');
 }
 
-function normalizeEntry(raw) {
+function sanitizeComputedEntry(raw) {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Computed leaderboard entry is required.');
+  }
+
+  const toFinite = (value, label) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      throw new Error(`Leaderboard entry is missing ${label}.`);
+    }
+    return num;
+  };
+
   const safeName = String(raw.name ?? '').trim().slice(0, 32) || 'Anonymous';
-  const safeScore = Number.isFinite(Number(raw.score)) ? Math.round(Number(raw.score)) : 0;
-  const safeProfit = Number.isFinite(Number(raw.profit)) ? Math.round(Number(raw.profit)) : 0;
-  const rawUptime = Number.isFinite(Number(raw.uptime)) ? Number(raw.uptime) : 0;
-  const rawEmissions = Number.isFinite(Number(raw.emissions)) ? Number(raw.emissions) : 0;
+  const score = toFinite(raw.score, 'score');
+  const profit = toFinite(raw.profit, 'profit');
+  const uptime = toFinite(raw.uptime, 'uptime');
+  const emissions = toFinite(raw.emissions, 'emissions');
 
   return {
     id: randomUUID(),
     name: safeName,
-    score: safeScore,
-    profit: safeProfit,
-    uptime: Math.round(clamp(rawUptime, 0, 100)),
-    emissions: Math.max(0, Math.round(rawEmissions)),
+    score: Math.round(score),
+    profit: Math.round(profit),
+    uptime: Math.round(clamp(uptime, 0, 100)),
+    emissions: Math.max(0, Math.round(emissions)),
     endedAt: new Date().toISOString(),
   };
 }
@@ -62,7 +78,7 @@ export async function getLeaderboard(limit) {
 }
 
 export async function appendLeaderboardEntry(rawEntry) {
-  const entry = normalizeEntry(rawEntry ?? {});
+  const entry = sanitizeComputedEntry(rawEntry ?? {});
   const entries = await loadEntries();
   entries.push(entry);
   entries.sort((a, b) => b.score - a.score);
