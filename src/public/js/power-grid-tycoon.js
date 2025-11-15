@@ -33,6 +33,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const historyCanvas = el('#history'), ctx = historyCanvas.getContext('2d');
   const timerEl = el('#timer'), clockEl = el('#clock'), overloadBanner = el('#overloadBanner'), overloadPill = el('#overloadPill'), overloadRemainEl = el('#overloadRemain'), overloadReasonEl = el('#overloadReason');
   const genList = el('#genList'), custList = el('#custList');
+  const batteryStatusEl = el('#batteryStatus');
   const buildTbody = el('#buildTable tbody'), buildQueueEl = el('#buildQueue');
   const offersArea = el('#offersArea'), upgradesArea = el('#upgradesArea');
   const leaderNameInput = el('#leaderName'), leaderSaveBtn = el('#saveScoreBtn'), leaderSaveStatus = el('#leaderSaveStatus');
@@ -69,7 +70,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     { key:'wind',  name:'Wind Farm',  fuel:'wind',  cap:30,  startup:0,  opex:5,   co2:0,   buildTime:12, capex:18000, variable:true },
     { key:'solar', name:'Solar PV',   fuel:'solar', cap:25,  startup:0,  opex:4,   co2:0,   buildTime:10, capex:15000, variable:true },
     { key:'nuclear', name:'Nuclear',  fuel:'nuclear', cap:120,startup:12,opex:25,  co2:0,   buildTime:30, capex:120000, locked:true, unlockNote:'Profits ≥ $150k' },
-    { key:'battery', name:'Battery',  fuel:'battery', cap:25, startup:0,  opex:6,  co2:0,   buildTime:12, capex:32000, isBattery:true, energyMax:1600, roundTrip:0.9 }
+    { key:'battery', name:'Battery',  fuel:'battery', cap:25, startup:0,  opex:6,  co2:0,   buildTime:12, capex:32000, isBattery:true, energyMax:25, roundTrip:1 }
   ];
 
 // SECTION: Data table/enum `UPGRADES` — list-like configuration
@@ -105,11 +106,22 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   let offers     = [];
   let events     = []; // active timed events
   let fuelMultipliers = { coal:1, gas:1 };
+  let batteryCounter = 0;
 
   // ---------- Initialization ----------
   function initGame(){
-    // Start assets (altered: start with four independent 10 MW gas turbines; max 40 MW total)
+    // Start assets (altered: include a 100 MW starter battery and four independent 10 MW gas turbines; max 40 MW thermal)
+      batteryCounter = 0;
+      const starterBattery = makeBattery({
+        id: 'battery-1',
+        name: 'Battery 1',
+        power: 100,
+        energyMax: 100,
+        order: batteryCounter++,
+        initialEnergy: 0
+      });
       generators = [
+        starterBattery,
         makeGen('coal-1','Coal Unit','coal',60,3,55,900,false, /*on*/ true),
         makeGen('wind-1','Wind Farm','wind',30,0,5,0,true,true),
         makeGen('solar-1','Solar PV','solar',25,0,4,0,true,true),
@@ -162,10 +174,15 @@ import { computeReserveRequirement } from './reserve-requirement.js';
       age:0, fault:false, maint:1.0, building:false
     };
   }
-// Function: makeBattery(id,name,power,energyMax,roundTrip) — purpose: [describe]. Returns: [value/void].
-  function makeBattery(id,name,power,energyMax,roundTrip){
-    const g = makeGen(id,name,'battery',power,0,6,0,false,true);
-    g.isBattery = true; g.energy = Math.round(energyMax*0.5); g.energyMax = energyMax; g.roundTrip = roundTrip||0.9;
+// Function: makeBattery({ id, name, power, energyMax, roundTrip, initialEnergy, order }) — purpose: creates a battery generator with
+// configured storage defaults and ordering metadata for charge/discharge priority. Returns: generator object.
+  function makeBattery({ id, name, power, energyMax, roundTrip = 1, initialEnergy = 0, order = 0 }){
+    const g = makeGen(id, name, 'battery', power, 0, 6, 0, false, true);
+    g.isBattery = true;
+    g.energyMax = Math.max(0, energyMax);
+    g.energy = clamp(initialEnergy, 0, g.energyMax);
+    g.roundTrip = roundTrip;
+    g.batteryOrder = order;
     return g;
   }
 
@@ -179,14 +196,28 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     genList.innerHTML='';
     // Split gas vs. others for UI
      const gasUnits = generators.filter(g=>g.fuel==='gas');
-     const others   = generators.filter(g=>g.fuel!=='gas');
+     const others   = generators
+        .filter(g=>g.fuel!=='gas')
+        .sort((a,b)=>{
+          if(a.isBattery && b.isBattery){
+            return (a.batteryOrder??0) - (b.batteryOrder??0);
+          }
+          if(a.isBattery) return -1;
+          if(b.isBattery) return 1;
+          return a.name.localeCompare(b.name);
+        });
      // Render non-gas as individual rows (unchanged behavior)
      for(const g of others){
        const row = document.createElement('div');
        row.className='row';
        const tags = `<span class="tag">${g.fuel}</span>` + (g.variable?`<span class="tag">variable</span>`:'') + (g.isBattery?`<span class="tag">battery</span>`:'');
+       const detailId = `${g.id}-detail`;
+       const pct = g.isBattery && g.energyMax>0 ? Math.round((g.energy/g.energyMax)*100) : null;
+       const detailText = g.isBattery
+         ? `Power ${g.cap} MW • Charge ${fmt(Math.round(g.energy))}/${fmt(g.energyMax)} MW${pct!==null?` (${pct}%)`:''}`
+         : `Capacity ${g.cap} MW`;
        row.innerHTML = `
-         <div class="name">${g.name} ${tags} <div class="muted small">${g.isBattery?`Power ${g.cap} MW • Energy ${fmt(g.energy)}/${fmt(g.energyMax)}`:`Capacity ${g.cap} MW`}</div></div>
+         <div class="name">${g.name} ${tags} <div class="muted small" id="${detailId}">${detailText}</div></div>
          <div class="status">${g.fault?'<span class="bad">FAULT</span>':(g.enabled? (g.on?'Online':'OFF') : `Starting (${g._startRemain||g.startup}s)`)}</div>
          <div class="status">Out: <strong id="${g.id}-out">0</strong> MW <span class="muted">| OPEX $${g.opex}</span></div>
          <div class="right">
@@ -197,10 +228,38 @@ import { computeReserveRequirement } from './reserve-requirement.js';
        el(`#${g.id}-switch`).addEventListener('click', (e)=>{ e.preventDefault(); toggleGen(g.id); });
      }
      // Render gas fleet as a single row with 0–N selector
-     if(gasUnits.length){
-       renderGasFleet(gasUnits);
-     }
+      if(gasUnits.length){
+        renderGasFleet(gasUnits);
+      }
+      renderBatteryStatus();
    }
+
+  function renderBatteryStatus(){
+    if(!batteryStatusEl) return;
+    const batts = generators.filter(g=>g.isBattery);
+    if(batts.length===0){
+      batteryStatusEl.innerHTML = '<div class="muted small">No batteries deployed yet.</div>';
+      return;
+    }
+    batteryStatusEl.innerHTML = '';
+    const sorted = [...batts].sort((a,b)=> (a.batteryOrder??0) - (b.batteryOrder??0));
+    for(const b of sorted){
+      const pct = b.energyMax>0 ? Math.round((b.energy/b.energyMax)*100) : 0;
+      const clampedPct = clamp(pct, 0, 100);
+      const row = document.createElement('div');
+      row.className = 'battery-status-row';
+      const statusLabel = b.on ? 'Active' : 'Disabled';
+      row.classList.toggle('battery-status-off', !b.on);
+      row.innerHTML = `
+        <div class="battery-status-meta">
+          <div class="battery-status-name">${b.name}</div>
+          <div class="muted small">Stored ${fmt(Math.round(b.energy))}/${fmt(b.energyMax)} MW • ${statusLabel}</div>
+        </div>
+        <div class="battery-status-bar"><div class="battery-status-fill" style="width:${clampedPct}%"></div></div>
+        <div class="battery-status-pct">${clampedPct}%</div>`;
+      batteryStatusEl.appendChild(row);
+    }
+  }
 // Function: renderGasFleet(gasUnits) — purpose: [describe]. Returns: [value/void].
    function renderGasFleet(gasUnits){
      const total = gasUnits.length;
@@ -356,9 +415,22 @@ import { computeReserveRequirement } from './reserve-requirement.js';
         const bp = BLUEPRINTS.find(b=>b.key===key); if(!bp) return;
         if(cash < bp.capex){ toastMsg('Not enough cash.'); return; }
         cash -= bp.capex;
-        const task = { id:'b-'+Math.random().toString(36).slice(2,8), bpKey:key, name:bp.name, remain:bp.buildTime, total:bp.buildTime };
+        let taskName = bp.name;
+        let batteryOrderForTask = null;
+        if(bp.isBattery){
+          batteryOrderForTask = batteryCounter++;
+          taskName = `Battery ${batteryOrderForTask+1}`;
+        }
+        const task = {
+          id:'b-'+Math.random().toString(36).slice(2,8),
+          bpKey:key,
+          name:taskName,
+          remain:bp.buildTime,
+          total:bp.buildTime,
+          batteryOrder: batteryOrderForTask
+        };
         buildQueue.push(task); renderQueue();
-        toastMsg(`Construction started: ${bp.name}.`);
+        toastMsg(`Construction started: ${taskName}.`);
       });
     });
     renderQueue();
@@ -486,20 +558,41 @@ import { computeReserveRequirement } from './reserve-requirement.js';
 // Function: batteryDispatch(balance) — purpose: [describe]. Returns: [value/void].
   function batteryDispatch(balance){
     // positive balance means surplus supply; negative means deficit
-    const batts = generators.filter(g=>g.isBattery && g.on);
+    const batts = generators.filter(g=>g.isBattery && g.on && g.enabled !== false && !g.fault);
+    if(!batts.length) return 0;
+
     let adjust = 0;
-    for(const b of batts){
-      const canDis = Math.min(b.cap, b.energy);       // MW limited by stored units (1 unit ~ 1 MW·s)
-      const canChg = Math.min(b.cap, b.energyMax - b.energy);
-      if(balance< -1){ // deficit -> discharge
-        const need = Math.min(-balance, canDis);
-        b.actual = need; b.energy -= need; adjust += need;
-      } else if(balance> 1){ // surplus -> charge
-        const room = Math.min(balance, canChg);
-        const take = room * b.roundTrip; // charge loss represented by storing less
-        b.actual = -room; b.energy += take; adjust -= room;
-      } else { b.actual = 0; }
+    // reset outputs each tick before applying new action
+    for(const b of batts){ b.actual = 0; }
+
+    if(balance < -1){
+      let remainingNeed = Math.abs(balance);
+      const dischargeOrder = [...batts].sort((a,b)=> (b.batteryOrder??0) - (a.batteryOrder??0));
+      for(const b of dischargeOrder){
+        if(remainingNeed <= 0) break;
+        const available = Math.min(b.cap, Math.max(0, b.energy));
+        if(available <= 0) continue;
+        const deliver = Math.min(remainingNeed, available);
+        b.actual = deliver;
+        b.energy = Math.max(0, b.energy - deliver);
+        adjust += deliver;
+        remainingNeed -= deliver;
+      }
+    } else if(balance > 1){
+      let excess = balance;
+      const chargeOrder = [...batts].sort((a,b)=> (a.batteryOrder??0) - (b.batteryOrder??0));
+      for(const b of chargeOrder){
+        if(excess <= 0) break;
+        const capacityLeft = Math.min(b.cap, Math.max(0, b.energyMax - b.energy));
+        if(capacityLeft <= 0) continue;
+        const take = Math.min(excess, capacityLeft);
+        b.actual = -take;
+        b.energy = Math.min(b.energyMax, b.energy + take);
+        adjust -= take;
+        excess -= take;
+      }
     }
+
     return adjust; // MW added to supply (negative means charging)
   }
 
@@ -843,7 +936,21 @@ import { computeReserveRequirement } from './reserve-requirement.js';
       for(const q of done){
         const bp = BLUEPRINTS.find(b=>b.key===q.bpKey);
         if(bp.isBattery){
-          const b = makeBattery('bat-'+Math.random().toString(36).slice(2,7), 'Battery', bp.cap, bp.energyMax, bp.roundTrip);
+          let order = Number.isFinite(q.batteryOrder) ? q.batteryOrder : batteryCounter++;
+          if(!Number.isFinite(q.batteryOrder)){
+            q.batteryOrder = order;
+            q.name = `Battery ${order+1}`;
+          }
+          const label = q.name || `Battery ${order+1}`;
+          const b = makeBattery({
+            id: 'bat-'+Math.random().toString(36).slice(2,7),
+            name: label,
+            power: bp.cap,
+            energyMax: bp.energyMax,
+            roundTrip: bp.roundTrip,
+            order,
+            initialEnergy: 0
+          });
           generators.push(b);
         }else{
           const id = bp.key+'-'+Math.random().toString(36).slice(2,7);
@@ -880,6 +987,11 @@ import { computeReserveRequirement } from './reserve-requirement.js';
       if(out){
         if(g.isBattery){
           out.textContent = (g.actual>0? '+' : (g.actual<0? '' : '')) + fmt(g.actual);
+          const detail = el(`#${g.id}-detail`);
+          if(detail){
+            const pct = g.energyMax>0 ? Math.round((g.energy/g.energyMax)*100) : 0;
+            detail.textContent = `Power ${g.cap} MW • Charge ${fmt(Math.round(g.energy))}/${fmt(g.energyMax)} MW (${pct}%)`;
+          }
         }else{
           out.textContent = fmt(Math.max(0,g.actual||0));
         }
@@ -893,6 +1005,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     // buttons
     setButtons();
     updateGasFleetUI?.();
+    renderBatteryStatus();
   }
 // Function: updateGasFleetUI() — purpose: [describe]. Returns: [value/void].
 function updateGasFleetUI(){
@@ -1167,7 +1280,7 @@ function updateGasFleetUI(){
   // ---------- Bootstrap ----------
   initGame();
   renderLegend();
-  prepareLeaderboardSave(null);
+  prepareLeaderboardSave();
   renderLeaderboard();
   loadLeaderboard();
 
@@ -1180,3 +1293,6 @@ function updateGasFleetUI(){
   rafLoop();
 
 })();
+
+
+

@@ -28,6 +28,19 @@
   .bar label{display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:var(--muted)}
   .bar-outer{height:16px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden;border:1px solid var(--border)}
   .bar-inner{height:100%;width:0;transition:width .25s linear;background:linear-gradient(90deg,var(--accent),#7afabf)}
+  .battery-panel{margin:16px 0 12px;background:var(--chip);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .battery-panel-header{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-bottom:12px}
+  .battery-panel-header h3{margin:0;font-size:14px;letter-spacing:0.4px;text-transform:uppercase}
+  .battery-status-list{display:flex;flex-direction:column;gap:10px}
+  .battery-status-row{display:grid;grid-template-columns:1.4fr 1fr auto;gap:12px;align-items:center;background:linear-gradient(180deg,#141f3f,#101730);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+  .battery-status-meta{display:flex;flex-direction:column;gap:4px}
+  .battery-status-name{font-weight:700;font-size:14px}
+  .battery-status-bar{height:12px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden;border:1px solid var(--border)}
+  .battery-status-fill{height:100%;width:0;background:linear-gradient(90deg,#7afabf,#6ee7ff);transition:width .2s linear}
+  .battery-status-pct{font-weight:700;font-size:12px;color:var(--accent)}
+  .battery-status-off{opacity:.85}
+  .battery-status-off .battery-status-fill{background:linear-gradient(90deg,#4b5678,#6a7aa5)}
+  .battery-status-off .battery-status-pct{color:var(--muted)}
   .balance{display:flex;align-items:center;gap:16px;margin-top:8px;flex-wrap:wrap}
   .dial{width:120px;height:120px;border-radius:50%;background:conic-gradient(var(--good) 0deg,var(--good) 60deg,var(--warn) 120deg,var(--bad) 180deg,var(--bad) 360deg);display:grid;place-items:center;border:1px solid var(--border)}
   .dial-inner{width:90px;height:90px;border-radius:50%;background:#0d1531;display:grid;place-items:center;border:1px solid var(--border)}
@@ -79,6 +92,10 @@
   .ghost{opacity:.6}
   .hr{border-top:1px solid var(--border);margin:12px 0}
   @media (max-width:1080px){ .kpis{grid-template-columns:repeat(4,1fr)} .grid{grid-template-columns:1fr} }
+  @media (max-width:768px){
+    .battery-status-row{grid-template-columns:1fr;gap:8px}
+    .battery-status-pct{justify-self:start}
+  }
 
 .overload-banner{
   display:block;

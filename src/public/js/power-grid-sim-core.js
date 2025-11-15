@@ -61,3 +61,6 @@ export function finalizeSupplyDemandBalance({
     preDispatchSupply
   };
 }
+
+
+export default { finalizeSupplyDemandBalance, applyEventAdjustments };

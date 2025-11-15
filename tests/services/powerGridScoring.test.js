@@ -1,18 +1,7 @@
-const fs = require('fs');
-const path = require('path');
-
-let scorePowerGridRun;
-
-beforeAll(() => {
-  const modulePath = path.join(__dirname, '../../src/services/powerGridScoring.js');
-  let code = fs.readFileSync(modulePath, 'utf8');
-  code = code.replace(/export\s+function\s+scorePowerGridRun/g, 'function scorePowerGridRun');
-  code += '\nmodule.exports = { scorePowerGridRun };';
-  const moduleObj = { exports: {} };
-  const wrapper = new Function('module', 'exports', 'require', code);
-  wrapper(moduleObj, moduleObj.exports, require);
-  ({ scorePowerGridRun } = moduleObj.exports);
-});
+// tests/services/powerGridScoring.test.js
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { scorePowerGridRun } from '../../src/services/powerGridScoring.js';
 
 describe('scorePowerGridRun', () => {
   const baseFrame = {
@@ -40,7 +29,7 @@ describe('scorePowerGridRun', () => {
     ],
   };
 
-  test('computes a leaderboard entry from telemetry frames', () => {
+  it('computes a leaderboard entry from telemetry frames', () => {
     const run = {
       version: 1,
       difficulty: 'normal',
@@ -52,7 +41,7 @@ describe('scorePowerGridRun', () => {
 
     const result = scorePowerGridRun({ name: '  Alice  ', run });
 
-    expect(result).toEqual({
+    assert.deepEqual(result, {
       name: 'Alice',
       score: 24886,
       profit: -102,
@@ -61,28 +50,34 @@ describe('scorePowerGridRun', () => {
     });
   });
 
-  test('rejects telemetry where reported supply and generator output diverge', () => {
+  it('rejects telemetry where reported supply and generator output diverge', () => {
     const tampered = {
       version: 1,
       difficulty: 'normal',
       frames: [
         {
           ...baseFrame,
-          supply: 120,
+          supply: 120, // does not match generators
         },
       ],
     };
 
-    expect(() => scorePowerGridRun({ name: 'Bob', run: tampered })).toThrow('Supply telemetry does not match generator outputs.');
+    assert.throws(
+      () => scorePowerGridRun({ name: 'Bob', run: tampered }),
+      /Supply telemetry does not match generator outputs\./,
+    );
   });
 
-  test('rejects submissions with no telemetry frames', () => {
+  it('rejects submissions with no telemetry frames', () => {
     const emptyRun = {
       version: 1,
       difficulty: 'normal',
       frames: [],
     };
 
-    expect(() => scorePowerGridRun({ name: 'Carol', run: emptyRun })).toThrow('Telemetry frames are required.');
+    assert.throws(
+      () => scorePowerGridRun({ name: 'Carol', run: emptyRun }),
+      /Telemetry frames are required\./,
+    );
   });
 });

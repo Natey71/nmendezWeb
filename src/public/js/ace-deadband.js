@@ -52,3 +52,5 @@ export function createAceDeadbandTracker({
 
   return { step, reset };
 }
+
+export default { createAceDeadbandTracker };

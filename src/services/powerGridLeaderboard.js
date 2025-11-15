@@ -35,7 +35,16 @@ async function loadEntries() {
 }
 
 async function saveEntries(entries) {
+  await ensureStore();
   await fs.writeFile(dataFile, JSON.stringify(entries, null, 2), 'utf-8');
+}
+
+let queue = Promise.resolve();
+
+function enqueueSerialized(operation) {
+  const run = queue.then(() => operation(), () => operation());
+  queue = run.catch(() => {});
+  return run;
 }
 
 function sanitizeComputedEntry(raw) {
@@ -69,19 +78,23 @@ function sanitizeComputedEntry(raw) {
 }
 
 export async function getLeaderboard(limit) {
-  const entries = await loadEntries();
-  entries.sort((a, b) => b.score - a.score);
-  if (limit && Number.isFinite(Number(limit))) {
-    return entries.slice(0, Number(limit));
-  }
-  return entries;
+  return enqueueSerialized(async () => {
+    const entries = await loadEntries();
+    entries.sort((a, b) => b.score - a.score);
+    if (limit && Number.isFinite(Number(limit))) {
+      return entries.slice(0, Number(limit));
+    }
+    return entries;
+  });
 }
 
 export async function appendLeaderboardEntry(rawEntry) {
   const entry = sanitizeComputedEntry(rawEntry ?? {});
-  const entries = await loadEntries();
-  entries.push(entry);
-  entries.sort((a, b) => b.score - a.score);
-  await saveEntries(entries);
-  return entry;
+  return enqueueSerialized(async () => {
+    const entries = await loadEntries();
+    entries.push(entry);
+    entries.sort((a, b) => b.score - a.score);
+    await saveEntries(entries);
+    return entry;
+  });
 }
