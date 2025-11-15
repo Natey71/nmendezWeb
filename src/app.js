@@ -10,8 +10,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '200mb' }));
+app.use(express.json({ limit: '200mb' }));
 
 // get secret
 // Routes
