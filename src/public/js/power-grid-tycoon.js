@@ -6,6 +6,8 @@
      - Search for 'SECTION' or 'Function' to jump around.
 */
 
+import { finalizeSupplyDemandBalance } from './power-grid-sim-core.js';
+
 (function(){
   // ---------- Utilities ----------
   const el = q => document.querySelector(q);
@@ -597,21 +599,6 @@
     if(e.type==='heat'){ toastMsg('Heat wave: residential & commercial demand up.'); }
   }
 // Function: applyEventEffects(demand) — purpose: [describe]. Returns: [value/void].
-  function applyEventEffects(demand){
-    let d = demand;
-    for(const ev of events){
-      if(ev.type==='storm'){
-        for(const g of generators){
-          if(g.fuel==='wind') g.actual = Math.round(g.actual*0.55);
-          if(g.fuel==='solar') g.actual = Math.round(g.actual*0.7);
-        }
-      }
-      if(ev.type==='heat'){
-        d *= 1.08;
-      }
-    }
-    return d;
-  }
 // Function: cleanupEvents() — purpose: [describe]. Returns: [value/void].
   function cleanupEvents(){
     events = events.filter(e=>{
@@ -673,19 +660,24 @@
     updateRenewables(secondsInDay);
     updateThermalAndBattery();
 
-    // Supply before battery
-    let supply = generators.reduce((s,g)=> s + Math.max(0,g.actual||0), 0);
-    // Battery reacts
-    const adjusted = batteryDispatch(supply - demand);
-    supply += adjusted;
+    // Apply event effects before finalizing supply and battery response
+    const balance = finalizeSupplyDemandBalance({
+      demand,
+      generators,
+      events,
+      reservePct: RESERVE_PCT,
+      batteryDispatch: batteryDispatch
+    });
 
-    // Apply event effects (may modify renewable output and demand)
-    demand = Math.round(applyEventEffects(demand));
+    demand = balance.demand;
+    let supply = balance.supply;
+    const rawBalance = balance.rawBalance;
+    const oversupply = balance.oversupply;
+    const reserveMW = balance.reserveMW;
+    const oversupplyBeyondReserve = balance.oversupplyBeyondReserve;
+    const deficit = balance.deficit;
 
     // 3) Frequency dynamics with reserve band
-    const reserveMW = Math.round(demand * RESERVE_PCT);
-    const rawBalance = supply - demand;
-    const oversupply = Math.max(0, rawBalance);
     const effectiveBalance = oversupply>0 ? Math.max(0, oversupply - reserveMW) : rawBalance; // ignore reserve oversupply
     const df = effectiveBalance * DIFFICULTY[difficulty].mismatchHzFactor;
     const relax = (TARGET_HZ - freq) * 0.06;
@@ -726,8 +718,6 @@
     else rep = clamp(rep - 0.15, 0, 110);
 
     // 6) Safety / overload (replace instant stop with 45s warning window)
-    const deficit = demand - supply;
-    const oversupplyBeyondReserve = Math.max(0, oversupply - reserveMW);
     const unsafe = (freq<SAFE_HZ_MIN || freq>SAFE_HZ_MAX || deficit>0 || oversupplyBeyondReserve>0);
     if(unsafe){
       const reason = freq<SAFE_HZ_MIN||freq>SAFE_HZ_MAX ? `frequency ${freq.toFixed(2)} Hz` :
