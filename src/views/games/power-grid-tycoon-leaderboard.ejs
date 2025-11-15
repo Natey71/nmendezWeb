@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %></title>
+    <link href="/css/output.css" rel="stylesheet" />
+    <link href="/css/power-grid-tycoon.css" rel="stylesheet" />
+  </head>
+  <body class="bg-white dark:bg-gray-900 min-h-screen">
+    <%- include('../partials/navbar') %>
+
+    <main class="container mx-auto px-4 py-12">
+      <header class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-10">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Power Grid Tycoon Leaderboard
+          </h1>
+          <p class="text-gray-600 dark:text-gray-300 max-w-2xl">
+            These are the most recent grid operators to finish a run. Scores combine profit, uptime, and carbon performance.
+          </p>
+        </div>
+        <div class="flex gap-3">
+          <a href="/games/power-grid-tycoon" class="btn">Play Again</a>
+          <a href="/games" class="btn">All Games</a>
+        </div>
+      </header>
+
+      <% if (entries && entries.length) { %>
+        <section class="bg-white dark:bg-gray-800 rounded-2xl shadow p-6">
+          <div class="overflow-x-auto">
+            <table class="table w-full">
+              <thead>
+                <tr>
+                  <th class="text-left">Rank</th>
+                  <th class="text-left">Player</th>
+                  <th class="text-left">Score</th>
+                  <th class="text-left">Profit</th>
+                  <th class="text-left">Uptime</th>
+                  <th class="text-left">Emissions</th>
+                  <th class="text-left">Completed</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% entries.forEach((entry, index) => { %>
+                  <tr>
+                    <td><%= index + 1 %></td>
+                    <td><%= entry.name %></td>
+                    <td><%= entry.score.toLocaleString('en-US') %></td>
+                    <td>$<%= entry.profit.toLocaleString('en-US') %></td>
+                    <td><%= entry.uptime %>%</td>
+                    <td><%= entry.emissions.toLocaleString('en-US') %> t</td>
+                    <td><%= new Date(entry.endedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      <% } else { %>
+        <section class="bg-white dark:bg-gray-800 rounded-2xl shadow p-10 text-center">
+          <p class="text-lg text-gray-600 dark:text-gray-300">
+            No runs recorded yet. Be the first to keep the grid stable and claim the top score!
+          </p>
+          <a href="/games/power-grid-tycoon" class="btn" style="margin-top:20px;">Play Power Grid Tycoon</a>
+        </section>
+      <% } %>
+    </main>
+  </body>
+</html>
