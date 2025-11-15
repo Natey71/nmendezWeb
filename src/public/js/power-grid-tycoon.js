@@ -14,7 +14,7 @@ import { buildForecastTimeline, formatGameClockLabel } from './time-utils.js';
 (function(){
   // ---------- Utilities ----------
   const el = q => document.querySelector(q);
-// Function (arrow): els(q) — purpose: [describe].
+  // Function (arrow): els(q) — purpose: [describe].
   const els = q => Array.from(document.querySelectorAll(q));
 // Function (arrow): fmt(n) — purpose: [describe].
   const fmt = n => Math.round(n).toLocaleString();
@@ -42,6 +42,7 @@ import { buildForecastTimeline, formatGameClockLabel } from './time-utils.js';
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
+  const chartLib = typeof window !== 'undefined' ? window.Chart : undefined;
 
   // ---------- Elements ----------
   const demandEl = el('#demand'), supplyEl = el('#supply'), balanceEl = el('#balance');
@@ -51,9 +52,10 @@ import { buildForecastTimeline, formatGameClockLabel } from './time-utils.js';
   const needle = el('#needle'), toast = el('#toast');
   const notificationLogEl = el('#notificationLog');
   const notificationLogWrapperEl = el('#notificationLogWrapper');
-  const historyCanvas = el('#history'), ctx = historyCanvas.getContext('2d');
+  const historyCanvas = el('#history');
+  let historyChart = null;
   const forecastCanvas = el('#forecastHistory');
-  const forecastCtx = forecastCanvas?.getContext?.('2d') || null;
+  let forecastChart = null;
   const forecastLegendEl = el('#forecastLegend');
   const seasonHudEl = el('#seasonHud');
   const timerEl = el('#timer'),
@@ -97,10 +99,8 @@ import { buildForecastTimeline, formatGameClockLabel } from './time-utils.js';
   const SAFE_HZ_MIN = 58.5, SAFE_HZ_MAX = 61.5, TARGET_HZ = 60.0;
   const DAY_SECONDS = 720;          // 12 real minutes = 24h in-game (1 in-game hour ≈ 30s)
   const HISTORY_LEN = 60;           // seconds for chart
-  const HISTORY_AXIS_HEIGHT = 18;
-  const FORECAST_HORIZON_SECONDS = 60;
+  const FORECAST_HORIZON_SECONDS = 120;
   const FORECAST_STEP_SECONDS = 5;
-  const FORECAST_AXIS_HEIGHT = 20;
   const FORECAST_COLORS = ['#f97316','#34d399','#60a5fa','#e879f9','#facc15','#22d3ee','#fb7185','#a3e635','#c084fc','#67e8f9','#fb923c'];
   const SEASONS = ['Spring','Summer','Fall','Winter'];
   const DAYS_PER_SEASON = 28;
@@ -1762,79 +1762,142 @@ function updateGasFleetUI(){
     history.push({demand,supply,balance,freq,timeSec});
     while(history.length>HISTORY_LEN) history.shift();
   }
+// Function: ensureHistoryChart() — purpose: lazily bootstrap the Chart.js history instance.
+  function ensureHistoryChart(){
+    if(historyChart || !historyCanvas || !chartLib) return;
+    const ctx = historyCanvas.getContext('2d');
+    historyChart = new chartLib(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Demand',
+            data: [],
+            borderColor: '#6ee7ff',
+            backgroundColor: 'rgba(110, 231, 255, 0.2)',
+            borderWidth: 2,
+            tension: 0.25,
+            fill: false,
+            pointRadius: 0,
+            yAxisID: 'yPower'
+          },
+          {
+            label: 'Supply',
+            data: [],
+            borderColor: '#7afabf',
+            backgroundColor: 'rgba(122, 250, 191, 0.2)',
+            borderWidth: 2,
+            tension: 0.25,
+            fill: false,
+            pointRadius: 0,
+            yAxisID: 'yPower'
+          },
+          {
+            label: 'Frequency',
+            data: [],
+            borderColor: '#ffd166',
+            backgroundColor: '#ffd166',
+            borderWidth: 0,
+            tension: 0.3,
+            fill: false,
+            pointRadius: 3,
+            pointHoverRadius: 4,
+            showLine: false,
+            yAxisID: 'yFreq'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+          x: {
+            ticks: { maxRotation: 0 },
+            title: { display: true, text: 'In-game Time (past minute)' }
+          },
+          yPower: {
+            type: 'linear',
+            position: 'left',
+            beginAtZero: true,
+            title: { display: true, text: 'MW' }
+          },
+          yFreq: {
+            type: 'linear',
+            position: 'right',
+            min: 57,
+            max: 63,
+            title: { display: true, text: 'Hz' },
+            grid: { drawOnChartArea: false }
+          }
+        }
+      }
+    });
+  }
+// Function: ensureForecastChart() — purpose: lazily bootstrap the forecast Chart.js instance.
+  function ensureForecastChart(){
+    if(forecastChart || !forecastCanvas || !chartLib) return;
+    const ctx = forecastCanvas.getContext('2d');
+    forecastChart = new chartLib(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: []
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+          x: {
+            ticks: { maxRotation: 0 },
+            title: { display: true, text: 'Upcoming Time (current + 4h)' }
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'MW' }
+          }
+        }
+      }
+    });
+  }
 // Function: drawHistory() — purpose: [describe]. Returns: [value/void].
   function drawHistory(){
     if(!historyCanvas) return;
-    const W = historyCanvas.width, H = historyCanvas.height;
-    const axisHeight = HISTORY_AXIS_HEIGHT;
-    const chartHeight = Math.max(10, H - axisHeight);
-    ctx.clearRect(0,0,W,H);
-    ctx.save(); ctx.translate(0,0);
-    // grid
-    ctx.globalAlpha = 0.15; ctx.strokeStyle = '#7aa1ff'; ctx.lineWidth=1;
-    ctx.beginPath();
-    for(let i=0;i<=6;i++){ const y=i*chartHeight/6; ctx.moveTo(0,y); ctx.lineTo(W,y); }
-    ctx.stroke(); ctx.globalAlpha=1;
+    ensureHistoryChart();
+    if(!historyChart) return;
 
-    // scale
-    const maxDemand = Math.max(100, ...history.map(h=>h.demand));
-    const maxSupply = Math.max(100, ...history.map(h=>h.supply));
-    const maxVal = Math.max(maxDemand, maxSupply, 150);
-
-// Function: pathFor(key) — purpose: [describe]. Returns: [value/void].
-    function pathFor(key){
-      ctx.beginPath();
-      history.forEach((h,i)=>{
-        const x = i/(HISTORY_LEN-1)*W;
-        const value = Number.isFinite(h[key]) ? h[key] : 0;
-        const y = chartHeight - (value/maxVal)*chartHeight;
-        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-      });
+    if(!history.length){
+      historyChart.data.labels = [];
+      historyChart.data.datasets.forEach(ds => { ds.data = []; });
+      historyChart.update('none');
+      return;
     }
-    // Demand (line)
-    ctx.strokeStyle = '#6ee7ff'; pathFor('demand'); ctx.stroke();
-    // Supply (line)
-    ctx.strokeStyle = '#7afabf'; pathFor('supply'); ctx.stroke();
 
-    // Frequency dots
-    ctx.fillStyle='#ffd166';
-    history.forEach((h,i)=>{
-      const x = i/(HISTORY_LEN-1)*W;
-      const freqVal = Number.isFinite(h.freq) ? h.freq : TARGET_HZ;
-      const y = chartHeight - ((freqVal-57)/(63-57))*chartHeight;
-      ctx.fillRect(x-1, y-1, 2, 2);
+    const labels = history.map(sample => {
+      const labelTime = Number.isFinite(sample?.timeSec) ? sample.timeSec : secondsInDay;
+      return formatGameClockLabel(labelTime, DAY_SECONDS);
     });
+    const demandData = history.map(sample => Math.max(0, Number(sample?.demand) || 0));
+    const supplyData = history.map(sample => Math.max(0, Number(sample?.supply) || 0));
+    const freqData = history.map(sample => Number.isFinite(sample?.freq) ? sample.freq : TARGET_HZ);
+    const maxVal = Math.max(150, ...demandData, ...supplyData);
 
-    // time axis
-    const axisY = chartHeight + 0.5;
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.beginPath();
-    ctx.moveTo(0, axisY);
-    ctx.lineTo(W, axisY);
-    ctx.stroke();
-
-    if(history.length>1){
-      const tickCount = Math.min(4, history.length);
-      ctx.fillStyle = '#9fb0ff';
-      ctx.font = '10px "Inter", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      for(let i=0;i<tickCount;i++){
-        const idx = Math.round(i*(history.length-1)/(tickCount-1 || 1));
-        const sample = history[idx];
-        if(!sample) continue;
-        const x = idx/(HISTORY_LEN-1)*W;
-        ctx.beginPath();
-        ctx.moveTo(x, axisY);
-        ctx.lineTo(x, axisY+4);
-        ctx.stroke();
-        const labelTime = Number.isFinite(sample.timeSec) ? sample.timeSec : secondsInDay;
-        const label = formatGameClockLabel(labelTime, DAY_SECONDS);
-        ctx.fillText(label, x, axisY+4);
-      }
-    }
-
-    ctx.restore();
+    historyChart.data.labels = labels;
+    if(historyChart.data.datasets[0]) historyChart.data.datasets[0].data = demandData;
+    if(historyChart.data.datasets[1]) historyChart.data.datasets[1].data = supplyData;
+    if(historyChart.data.datasets[2]) historyChart.data.datasets[2].data = freqData;
+    historyChart.options.scales.yPower.suggestedMax = Math.ceil(maxVal / 10) * 10;
+    historyChart.update('none');
   }
 
   function getCustomerColor(customer, index){
@@ -1858,32 +1921,14 @@ function updateGasFleetUI(){
   }
 
   function drawForecast(){
-    if(!forecastCanvas || !forecastCtx) return;
-    const W = forecastCanvas.width;
-    const H = forecastCanvas.height;
-    const axisHeight = FORECAST_AXIS_HEIGHT;
-    const chartHeight = Math.max(10, H - axisHeight);
-    forecastCtx.clearRect(0,0,W,H);
-    forecastCtx.save();
-
-    forecastCtx.globalAlpha = 0.12;
-    forecastCtx.strokeStyle = '#7aa1ff';
-    forecastCtx.lineWidth = 1;
-    forecastCtx.beginPath();
-    for(let i=0;i<=4;i+=1){
-      const y = i*chartHeight/4;
-      forecastCtx.moveTo(0,y);
-      forecastCtx.lineTo(W,y);
-    }
-    forecastCtx.stroke();
-    forecastCtx.globalAlpha = 1;
+    if(!forecastCanvas) return;
+    ensureForecastChart();
+    if(!forecastChart) return;
 
     if(!customers.length){
-      forecastCtx.fillStyle = '#9fb0ff';
-      forecastCtx.font = '12px "Inter", sans-serif';
-      forecastCtx.textAlign = 'center';
-      forecastCtx.fillText('No customers connected', W/2, chartHeight/2);
-      forecastCtx.restore();
+      forecastChart.data.labels = [];
+      forecastChart.data.datasets = [];
+      forecastChart.update('none');
       return;
     }
 
@@ -1893,6 +1938,7 @@ function updateGasFleetUI(){
       stepSeconds: FORECAST_STEP_SECONDS,
       daySeconds: DAY_SECONDS
     });
+    const labels = timeline.map(point => formatGameClockLabel(point?.absoluteSeconds ?? secondsInDay, DAY_SECONDS));
     const series = customers.map((customer, idx)=>({
       customer,
       color: getCustomerColor(customer, idx),
@@ -1902,45 +1948,20 @@ function updateGasFleetUI(){
     const allValues = series.flatMap(s=>s.values);
     const maxVal = Math.max(20, ...allValues);
 
-    series.forEach(line=>{
-      forecastCtx.beginPath();
-      forecastCtx.strokeStyle = line.color;
-      line.values.forEach((val, idx)=>{
-        const ratio = timeline.length>1 ? idx/(timeline.length-1) : 0;
-        const x = ratio * W;
-        const value = Number.isFinite(val) ? val : 0;
-        const y = chartHeight - (value / maxVal) * chartHeight;
-        if(idx===0) forecastCtx.moveTo(x,y); else forecastCtx.lineTo(x,y);
-      });
-      forecastCtx.stroke();
-    });
-
-    const axisY = chartHeight + 0.5;
-    forecastCtx.strokeStyle = 'rgba(255,255,255,0.35)';
-    forecastCtx.beginPath();
-    forecastCtx.moveTo(0, axisY);
-    forecastCtx.lineTo(W, axisY);
-    forecastCtx.stroke();
-
-    const tickCount = Math.min(4, timeline.length);
-    forecastCtx.fillStyle = '#9fb0ff';
-    forecastCtx.font = '10px "Inter", sans-serif';
-    forecastCtx.textAlign = 'center';
-    forecastCtx.textBaseline = 'top';
-    for(let i=0;i<tickCount;i+=1){
-      const idx = Math.round(i*(timeline.length-1)/(tickCount-1 || 1));
-      const point = timeline[idx];
-      const ratio = timeline.length>1 ? idx/(timeline.length-1) : 0;
-      const x = ratio * W;
-      forecastCtx.beginPath();
-      forecastCtx.moveTo(x, axisY);
-      forecastCtx.lineTo(x, axisY+4);
-      forecastCtx.stroke();
-      const label = formatGameClockLabel(point?.absoluteSeconds ?? secondsInDay, DAY_SECONDS);
-      forecastCtx.fillText(label, x, axisY+4);
-    }
-
-    forecastCtx.restore();
+    forecastChart.data.labels = labels;
+    forecastChart.data.datasets = series.map(line => ({
+      label: line.customer?.name || 'Customer',
+      data: line.values.map(val => Math.max(0, Number(val) || 0)),
+      borderColor: line.color,
+      backgroundColor: line.color,
+      borderWidth: 2,
+      tension: 0.25,
+      fill: false,
+      pointRadius: 2,
+      pointHoverRadius: 4
+    }));
+    forecastChart.options.scales.y.suggestedMax = Math.ceil(maxVal / 10) * 10;
+    forecastChart.update('none');
   }
 
   // ---------- Game Over / Leaderboard ----------
