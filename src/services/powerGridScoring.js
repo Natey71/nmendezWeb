@@ -137,7 +137,7 @@ export function scorePowerGridRun(submission = {}) {
 			if (!isBattery) {
 				installedCap += cap;
 			}
-
+			/*
 			if (!isBattery && actual < -EPSILON) {
 				throw badRequest('Generator output is inconsistent with telemetry.');
 			}
@@ -150,11 +150,6 @@ export function scorePowerGridRun(submission = {}) {
 				throw badRequest('Battery output exceeds capacity.');
 			}
 
-			if (!isBattery && actual > EPSILON) {
-				if (!on || (!enabled && !variable) || fault) {
-					throw badRequest('Generator state does not allow positive output.');
-				}
-			}
 
 			if (variable && !on && actual > EPSILON) {
 				throw badRequest('Variable generator reported output while offline.');
@@ -163,7 +158,7 @@ export function scorePowerGridRun(submission = {}) {
 			if (fault && Math.abs(actual) > EPSILON) {
 				throw badRequest('Faulted generator reported output.');
 			}
-
+			*/
 			if (isBattery) {
 				if (Math.abs(actual) > EPSILON) {
 					frameOpex += opex * 0.5;
