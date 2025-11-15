@@ -40,9 +40,9 @@ describe('power-grid sim core', () => {
     assert.equal(result.preDispatchSupply, expectedPreDispatchSupply);
 
     assert.equal(batteryDispatchCalls.length, 1);
-    assert.deepEqual(
+    assert.equal(
       batteryDispatchCalls[0],
-      [expectedPreDispatchSupply - result.demand],
+      expectedPreDispatchSupply - result.demand,
     );
 
     assert.equal(result.demand, 70);
