@@ -62,9 +62,6 @@ body {
         align-items: start;
 }
 
-.page-header {
-        margin-bottom: 24px;
-}
 
 .status-card {
         display: flex;
@@ -276,10 +273,10 @@ body {
 
 header {
 	display: flex;
+	flex-direction: column;
 	gap: 12px;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 16px
 }
 
 h1 {
