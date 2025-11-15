@@ -37,32 +37,112 @@ body {
         padding: 20px 20px 20px
 }
 
+
 .game-layout {
         display: flex;
-		justify-content: center;
+        justify-content: center;
         align-items: flex-start;
-        gap: 24px;
+        gap: 32px;
 }
 
-.season-column {
-        flex: 0 0 280px;
+.control-column {
+        flex: 0 0 260px;
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 20px;
         position: sticky;
         top: 120px;
         align-self: flex-start;
 }
 
+.season-panel {
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+}
+
+.season-panel .hud-panel,
+.season-panel #seasonHud {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+}
+
+.control-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+}
+
+.control-stack .btn,
+.control-stack .btn:link,
+.control-stack .btn:visited {
+        width: 100%;
+        text-align: center;
+        display: block;
+}
+
+.control-selects {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, .25);
+        font-size: 13px;
+        color: var(--muted);
+}
+
+.control-selects label {
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        font-weight: 600;
+}
+
+.control-selects select {
+        margin-bottom: 4px;
+}
+
 .game-main {
         flex: 1 1 auto;
         min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+}
+
+.game-main-content {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+        gap: 28px;
+        align-items: flex-start;
+}
+
+.game-main-content .notification-sidebar {
+        grid-column: 2;
+}
+
+.game-main-column {
+        grid-column: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
 }
 
 .main-panels {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        align-items: start;
+}
+
+.page-header {
+        margin-bottom: 24px;
 }
 
 .status-card {
@@ -83,8 +163,7 @@ body {
         gap: 12px;
         position: sticky;
         top: 120px;
-        max-height: 90vh;
-        height: 90vh;
+        max-height: calc(100vh - 160px);
 }
 
 .notification-sidebar__header {
@@ -287,6 +366,7 @@ h1 {
         display: flex;
         flex-direction: column;
         gap: 12px;
+        flex: 1 1 auto;
 }
 
 .section-heading {
@@ -303,13 +383,32 @@ h1 {
         gap: 12px;
 }
 
+.kpis--horizontal {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: thin;
+}
+
+.kpis--horizontal::-webkit-scrollbar {
+        height: 6px;
+}
+
+.kpis--horizontal::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 999px;
+}
+
 .kpi {
-	background: var(--card);
-	border: 1px solid var(--border);
-	padding: 14px;
-	border-radius: 12px;
-	min-width: 0;
-	min-height: 96px
+        background: var(--card);
+        border: 1px solid var(--border);
+        padding: 14px;
+        border-radius: 12px;
+        min-width: 0;
+        min-height: 96px;
+        flex: 1 1 160px;
 }
 
 .kpi h3 {
@@ -910,15 +1009,41 @@ canvas {
 	margin: 12px 0
 }
 
+@media (max-width:1400px) {
+        .main-panels {
+                grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+        }
+}
+
 @media (max-width:1080px) {
         .game-layout {
                 flex-direction: column;
         }
 
-        .season-column {
+        .control-column {
                 position: static;
-                width: 100%;
-                flex: 1 1 auto;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 12px;
+        }
+
+        .season-panel {
+                flex: 1 1 100%;
+        }
+
+        .control-stack {
+                flex-direction: row;
+                flex-wrap: wrap;
+        }
+
+        .control-stack .btn,
+        .control-stack .btn:link,
+        .control-stack .btn:visited {
+                flex: 1 1 160px;
+        }
+
+        .control-selects {
+                flex: 1 1 200px;
         }
 
         .notification-sidebar {
@@ -926,7 +1051,15 @@ canvas {
                 width: 100%;
                 max-width: none;
                 max-height: none;
-                height: auto;
+        }
+
+        .game-main-content {
+                grid-template-columns: 1fr;
+        }
+
+        .game-main-content .notification-sidebar,
+        .game-main-column {
+                grid-column: 1;
         }
 
         .container {
@@ -954,10 +1087,6 @@ canvas {
 
         #seasonHud {
                 padding: 14px 16px;
-        }
-
-        .season-column {
-                gap: 12px;
         }
 
         .hud-metrics {
