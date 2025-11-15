@@ -1280,7 +1280,7 @@ function updateGasFleetUI(){
   // ---------- Bootstrap ----------
   initGame();
   renderLegend();
-  prepareLeaderboardSave(null);
+  prepareLeaderboardSave();
   renderLeaderboard();
   loadLeaderboard();
 
