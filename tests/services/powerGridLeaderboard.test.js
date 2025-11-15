@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import os from 'os';
 import path from 'path';
 import { promises as fsp } from 'fs';
+import { spawn } from 'node:child_process';
 
 let appendLeaderboardEntry;
 let getLeaderboard;
@@ -99,5 +100,32 @@ describe('powerGridLeaderboard service', () => {
     } finally {
       writeMock.mock.restore();
     }
+  });
+
+  it('allows concurrent leaderboard saves from separate processes', async () => {
+    const scriptUrl = new URL('../fixtures/append-leaderboard-entry.js', import.meta.url);
+
+    const jobs = Array.from({ length: 5 }, (_, i) =>
+      new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [scriptUrl.pathname, String(i)], {
+          env: { ...process.env, POWER_GRID_LEADERBOARD_FILE: tmpFile },
+          stdio: 'ignore',
+        });
+
+        child.on('error', reject);
+        child.on('exit', (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Child exited with code ${code}`));
+          }
+        });
+      }),
+    );
+
+    await Promise.all(jobs);
+
+    const stored = await getLeaderboard();
+    assert.equal(stored.length, 5);
   });
 });
