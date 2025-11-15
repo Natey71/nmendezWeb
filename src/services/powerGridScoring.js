@@ -187,7 +187,7 @@ export function scorePowerGridRun(submission = {}) {
 
     if (Math.abs(supplyReported - computedSupply) > SUPPLY_TOLERANCE) {
       throw badRequest('Supply telemetry does not match generator outputs.');
-    }
+    } 
 
     totalOpex += frameOpex;
     totalEmissions += frameEmissions;
