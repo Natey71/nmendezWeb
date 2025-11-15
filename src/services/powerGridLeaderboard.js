@@ -1,101 +1,100 @@
-import { promises as fs } from 'fs';
+// src/services/powerGridLeaderboard.js
+import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const configuredDataFile = process.env.POWER_GRID_LEADERBOARD_FILE
+
+const configuredDbFile = process.env.POWER_GRID_LEADERBOARD_FILE
   ? path.resolve(process.env.POWER_GRID_LEADERBOARD_FILE)
-  : null;
-const defaultDataDir = path.join(__dirname, '..', 'data');
-const dataFile = configuredDataFile || path.join(defaultDataDir, 'power-grid-tycoon-leaderboard.json');
-const dataDir = path.dirname(dataFile);
-const lockFile = `${dataFile}.lock`;
+  : path.join(__dirname, '..', 'data', 'power-grid-tycoon', 'leaderboard.db');
 
-const LOCK_RETRY_DELAY_MS = 25;
-const LOCK_STALE_THRESHOLD_MS = 15_000;
+const dbDirectory = path.dirname(configuredDbFile);
+fs.mkdirSync(dbDirectory, { recursive: true });
 
-const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
-
-async function ensureStore() {
-  await fs.mkdir(dataDir, { recursive: true });
-  try {
-    await fs.access(dataFile);
-  } catch {
-    await fs.writeFile(dataFile, '[]', 'utf-8');
+function serializeParam(value) {
+  if (value === null || value === undefined) {
+    return 'NULL';
   }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (value instanceof Date) {
+    return `'${value.toISOString().replace(/'/g, "''")}'`;
+  }
+
+  const str = String(value);
+  return `'${str.replace(/'/g, "''")}'`;
 }
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function runSql(sql, params = {}, { json = false } = {}) {
+  const commands = ['.bail on', '.parameter clear'];
 
-async function acquireLock() {
-  while (true) {
+  for (const [key, value] of Object.entries(params)) {
+    commands.push(`.parameter set @${key} ${serializeParam(value)}`);
+  }
+
+  if (json) {
+    commands.push('.mode json');
+  }
+
+  const script = `${commands.join('\n')}\n${sql}\n`;
+
+  const result = spawnSync('sqlite3', ['-batch', configuredDbFile], {
+    input: script,
+    encoding: 'utf-8',
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0) {
+    const stderr = result.stderr?.trim();
+    const error = new Error(stderr || `Failed to execute SQL: ${sql}`);
+    error.stderr = stderr;
+    throw error;
+  }
+
+  if (json) {
+    const output = result.stdout.trim();
+    if (!output) {
+      return [];
+    }
+
     try {
-      return await fs.open(lockFile, 'wx');
-    } catch (error) {
-      if (error?.code !== 'EEXIST') {
-        throw error;
-      }
-
-      let lockStats;
-      try {
-        lockStats = await fs.stat(lockFile);
-      } catch (statError) {
-        if (statError?.code === 'ENOENT') {
-          continue;
-        }
-        throw statError;
-      }
-
-      if (Date.now() - lockStats.mtimeMs > LOCK_STALE_THRESHOLD_MS) {
-        await fs.unlink(lockFile).catch(() => {});
-        continue;
-      }
-
-      await wait(LOCK_RETRY_DELAY_MS);
+      return JSON.parse(output);
+    } catch (err) {
+      const error = new Error(`Failed to parse sqlite3 JSON output: ${err.message}`);
+      error.output = output;
+      throw error;
     }
   }
+
+  return undefined;
 }
 
-async function withFileLock(operation) {
-  await ensureStore();
-  const handle = await acquireLock();
-  try {
-    return await operation();
-  } finally {
-    try {
-      await handle.close();
-    } catch {}
-    await fs.unlink(lockFile).catch(() => {});
-  }
-}
+// Initialize DB for leaderboard
+runSql('PRAGMA journal_mode=WAL;');
+runSql('PRAGMA busy_timeout = 5000;');
+runSql(`
+  CREATE TABLE IF NOT EXISTS power_grid_leaderboard (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    profit INTEGER NOT NULL,
+    uptime INTEGER NOT NULL,
+    emissions INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+`);
 
-async function loadEntries() {
-  try {
-    const raw = await fs.readFile(dataFile, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-async function saveEntries(entries) {
-  await fs.writeFile(dataFile, JSON.stringify(entries, null, 2), 'utf-8');
-}
-
-let queue = Promise.resolve();
-
-function enqueueSerialized(operation) {
-  const run = queue.then(() => operation(), () => operation());
-  queue = run.catch(() => {});
-  return run;
-}
-
-function runWithExclusiveAccess(operation) {
-  return enqueueSerialized(() => withFileLock(operation));
-}
+const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
 function sanitizeComputedEntry(raw) {
   if (!raw || typeof raw !== 'object') {
@@ -123,28 +122,64 @@ function sanitizeComputedEntry(raw) {
     profit: Math.round(profit),
     uptime: Math.round(clamp(uptime, 0, 100)),
     emissions: Math.max(0, Math.round(emissions)),
-    endedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   };
 }
 
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 500;
+
+function resolveLimit(limit) {
+  if (limit === undefined || limit === null) {
+    return DEFAULT_LIMIT;
+  }
+
+  const numeric = Number(limit);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return DEFAULT_LIMIT;
+  }
+
+  return Math.min(numeric, MAX_LIMIT);
+}
+
 export async function getLeaderboard(limit) {
-  return runWithExclusiveAccess(async () => {
-    const entries = await loadEntries();
-    entries.sort((a, b) => b.score - a.score);
-    if (limit && Number.isFinite(Number(limit))) {
-      return entries.slice(0, Number(limit));
-    }
-    return entries;
-  });
+  const resolvedLimit = resolveLimit(limit);
+  const rows = runSql(
+    `
+      SELECT id, name, score, profit, uptime, emissions, created_at
+      FROM power_grid_leaderboard
+      ORDER BY score DESC, datetime(created_at) ASC, rowid ASC
+      LIMIT @limit;
+    `,
+    { limit: resolvedLimit },
+    { json: true },
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    score: Number(row.score),
+    profit: Number(row.profit),
+    uptime: Number(row.uptime),
+    emissions: Number(row.emissions),
+    createdAt: row.created_at,
+  }));
 }
 
 export async function appendLeaderboardEntry(rawEntry) {
   const entry = sanitizeComputedEntry(rawEntry ?? {});
-  return runWithExclusiveAccess(async () => {
-    const entries = await loadEntries();
-    entries.push(entry);
-    entries.sort((a, b) => b.score - a.score);
-    await saveEntries(entries);
-    return entry;
-  });
+
+  runSql(
+    `
+      INSERT INTO power_grid_leaderboard (id, name, score, profit, uptime, emissions, created_at)
+      VALUES (@id, @name, @score, @profit, @uptime, @emissions, @createdAt);
+    `,
+    entry,
+  );
+
+  return entry;
+}
+
+export async function clearLeaderboard() {
+  runSql('DELETE FROM power_grid_leaderboard;');
 }

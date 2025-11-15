@@ -50,7 +50,12 @@
                     <td>$<%= entry.profit.toLocaleString('en-US') %></td>
                     <td><%= entry.uptime %>%</td>
                     <td><%= entry.emissions.toLocaleString('en-US') %> t</td>
-                    <td><%= new Date(entry.endedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) %></td>
+                    <td>
+                      <%= new Date(entry.createdAt ?? entry.endedAt).toLocaleString('en-US', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }) %>
+                    </td>
                   </tr>
                 <% }) %>
               </tbody>
