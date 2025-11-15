@@ -1,211 +1,281 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title><%= title %></title>
-    <link href="/css/output.css" rel="stylesheet" />
-    <link href="/css/power-grid-tycoon.css" rel="stylesheet" />
-  </head>
-  <body class="bg-white dark:bg-gray-900 min-h-screen">
-    <%- include('../partials/navbar') %>
 
-    <div class="container">
-  <header>
-    <div>
-      <h1>Grid Tycoon — Mini Power Manager</h1>
-      <div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your grid. An adaptive reserve margin adjusts with online capacity and forecast ramps.</div>
-    </div>
-    <div class="controls">
-      <button id="startBtn" class="btn">Start</button>
-      <button id="pauseBtn" class="btn" disabled>Pause</button>
-      <button id="resetBtn" class="btn" disabled>Reset</button>
-      <select id="difficulty">
-        <option value="easy">Easy</option>
-        <option value="normal" selected>Normal</option>
-        <option value="hard">Hard</option>
-      </select>
-      <select id="speed">
-        <option value="1">1×</option>
-        <option value="2">2×</option>
-        <option value="4">4×</option>
-      </select>
-      <button id="howto" class="btn">How to Play</button>
-      <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
-    </div>
-  </header>
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>
+		<%= title %>
+	</title>
+	<link href="/css/output.css" rel="stylesheet" />
+	<link href="/css/power-grid-tycoon.css" rel="stylesheet" />
+</head>
 
-    <div id="overloadBanner" class="overload-banner" style="display:none">
-      <strong>OVERLOAD</strong> — fix in <span id="overloadRemain">45</span>s
-      <span id="overloadReasonWrap"> — <span id="overloadReason"></span></span>
-    </div>
-  <div class="grid">
-    
-    <section class="card">
-      <div class="kpis">
-        <div class="kpi"><h3>Demand</h3><div class="val"><span id="demand">0</span> MW</div></div>
-        <div class="kpi"><h3>Supply</h3><div class="val"><span id="supply">0</span> MW</div></div>
-        <div class="kpi"><h3>Balance</h3><div class="val"><span id="balance">0</span> MW</div></div>
-        <div class="kpi"><h3>Frequency</h3><div class="val"><span id="freq">60.00</span> Hz</div></div>
-        <div class="kpi"><h3>Spot Price</h3><div class="val">$<span id="price">0</span>/MWh</div></div>
-        <div class="kpi"><h3>Cash</h3><div class="val">$<span id="cash">0</span></div></div>
-        <div class="kpi"><h3>Reputation</h3><div class="val"><span id="rep">0</span></div></div>
-        <div class="kpi"><h3>Uptime</h3><div class="val"><span id="uptime">0</span>%</div></div>
-      </div>
+<body class="bg-white dark:bg-gray-900 min-h-screen">
+	<%- include('../partials/navbar') %>
 
-      <div class="bars">
-        <div class="bar">
-          <label><span>Demand</span><span id="demandLbl">0 MW</span></label>
-          <div class="bar-outer"><div id="dBar" class="bar-inner"></div></div>
-        </div>
-        <div class="bar">
-          <label><span>Supply</span><span id="supplyLbl">0 MW</span></label>
-          <div class="bar-outer"><div id="sBar" class="bar-inner"></div></div>
-        </div>
-      </div>
+		<div class="container">
+			<header>
+				<div>
+					<h1>Grid Tycoon — Mini Power Manager</h1>
+					<div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your
+						grid. An
+						adaptive reserve margin adjusts with online capacity and forecast ramps.</div>
+				</div>
+				<div class="controls">
+					<button id="startBtn" class="btn">Start</button>
+					<button id="pauseBtn" class="btn" disabled>Pause</button>
+					<button id="resetBtn" class="btn" disabled>Reset</button>
+					<select id="difficulty">
+						<option value="easy">Easy</option>
+						<option value="normal" selected>Normal</option>
+						<option value="hard">Hard</option>
+					</select>
+					<select id="speed">
+						<option value="1">1×</option>
+						<option value="2">2×</option>
+						<option value="4">4×</option>
+					</select>
+					<button id="howto" class="btn">How to Play</button>
+					<a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
+				</div>
+			</header>
 
-      <div class="battery-panel">
-        <div class="battery-panel-header">
-          <h3>Battery Storage</h3>
-          <span class="muted">Monitor charge levels across your fleet.</span>
-        </div>
-        <div id="batteryStatus" class="battery-status-list"></div>
-      </div>
+			<div id="overloadBanner" class="overload-banner" style="display:none">
+				<strong>OVERLOAD</strong> — fix in <span id="overloadRemain">45</span>s
+				<span id="overloadReasonWrap"> — <span id="overloadReason"></span></span>
+			</div>
+			<div class="grid">
 
-      <div class="balance">
-        <div>
-          <div class="dial">
-            <div class="dial-inner">
-              <div id="needle" class="needle"></div>
-            </div>
-          </div>
-          <div class="dial-caption">Grid Frequency
-            <div style="font-size:11px;color:#9fb0ff">58.5–61.5 Hz safe • Moderate oversupply within the dynamic reserve band is tolerated</div>
-          </div>
-        </div>
-        <div style="flex:1;min-width:320px">
-          <canvas id="history" width="1000" height="120" aria-label="History chart"></canvas>
-<div id="chartLegend" class="chart-legend"></div>
-          <div class="tight small" style="justify-content:space-between;margin-top:4px">
-            <span class="muted">Stability (60s)</span>
-            <span class="muted">Supply/Demand, Balance, Frequency</span>
-          </div>
-        </div>
-      </div>
-      <div class="help">
-        Keep balance within ±5 MW for best revenue and reputation. Frequency deviations or outages trigger a <strong>45s</strong> warning instead of instant game over.
-        Build new generation, accept contracts, and toggle individual businesses in the Customers panel.
-      </div>
-    </section>
+				<section class="card">
+					<div class="kpis">
+						<div class="kpi">
+							<h3>Demand</h3>
+							<div class="val"><span id="demand">0</span> MW</div>
+						</div>
+						<div class="kpi">
+							<h3>Supply</h3>
+							<div class="val"><span id="supply">0</span> MW</div>
+						</div>
+						<div class="kpi">
+							<h3>Balance</h3>
+							<div class="val"><span id="balance">0</span> MW</div>
+						</div>
+						<div class="kpi">
+							<h3>Frequency</h3>
+							<div class="val"><span id="freq">60.00</span> Hz</div>
+						</div>
+						<div class="kpi">
+							<h3>Spot Price</h3>
+							<div class="val">$<span id="price">0</span>/MWh</div>
+						</div>
+						<div class="kpi">
+							<h3>Cash</h3>
+							<div class="val">$<span id="cash">0</span></div>
+						</div>
+						<div class="kpi">
+							<h3>Reputation</h3>
+							<div class="val"><span id="rep">0</span></div>
+						</div>
+						<div class="kpi">
+							<h3>Uptime</h3>
+							<div class="val"><span id="uptime">0</span>%</div>
+						</div>
+					</div>
 
-    <section class="card">
-      <div class="section-title">
-        <div class="tight">
-          <strong>Operations</strong>
-          <span class="pill" id="clock">Day 1 — 06:00</span>
-          <span class="pill" id="timer">Sandbox</span>
-          <span class="pill bad" id="overloadPill" style="display:none">OVERLOAD — fix in <span id="overloadRemain">45</span>s</span>
-        </div>
-        <div class="tight">
-          <button id="openBuild" class="btn">Build</button>
-          <button id="openOffers" class="btn">Contracts</button>
-          <button id="openUpgrades" class="btn">Upgrades</button>
-        </div>
-      </div>
+					<div class="bars">
+						<div class="bar">
+							<label><span>Demand</span><span id="demandLbl">0 MW</span></label>
+							<div class="bar-outer">
+								<div id="dBar" class="bar-inner"></div>
+							</div>
+						</div>
+						<div class="bar">
+							<label><span>Supply</span><span id="supplyLbl">0 MW</span></label>
+							<div class="bar-outer">
+								<div id="sBar" class="bar-inner"></div>
+							</div>
+						</div>
+					</div>
 
-      <div class="split">
-        <div>
-          <div class="section-title"><div><strong>Generators</strong><span class="pill">Toggle units</span></div><span class="pill small">OPEX $/tick</span></div>
-          <div class="list" id="genList"></div>
-          <div class="help">Thermal units have startup delays; renewables vary; batteries auto charge/discharge when enabled.</div>
-        </div>
-        <div>
-          <div class="section-title"><div><strong>Customers</strong><span class="pill">Connect / disconnect</span></div><span class="pill small">Contracted MW</span></div>
-          <div class="list" id="custList"></div>
-          <div class="help">Businesses (retail, office, factory, datacenter) can be turned off individually via their switches.</div>
-        </div>
-      </div>
-    </section>
-  </div>
-</div>
 
-<!-- Toast -->
-<div id="toast" class="toast"></div>
+					<div class="balance">
+						<div>
+							<div class="dial">
+								<div class="dial-inner">
+									<div id="needle" class="needle"></div>
+								</div>
+							</div>
+						</div>
+						<div style="flex:1;min-width:320px">
+							<canvas id="history" height="120" aria-label="History chart"></canvas>
+							<div id="chartLegend" class="chart-legend"></div>
+							<div class="tight small" style="justify-content:space-between;margin-top:5px">
+								<span class="muted">58.5–61.5 Hz safe • Moderate oversupply within the dynamic reserve band is tolerated</span>
+								<span class="muted"> | Stability (60s)</span>
+							</div>
+						</div>
+					</div>
+					<div class="battery-panel">
+						<div class="battery-panel-header">
+							<h3>Battery Storage</h3>
+							<span class="muted">Monitor charge levels across your fleet.</span>
+						</div>
+						<div id="batteryStatus" class="battery-status-list"></div>
+					</div>
+					<div class="help">
+						Keep balance within ±5 MW for best revenue and reputation. Frequency deviations or outages
+						trigger a
+						<strong>45s</strong> warning instead of instant game over.
+						Build new generation, accept contracts, and toggle individual businesses in the Customers panel.
+					</div>
+				</section>
 
-<!-- How To -->
-<div id="modalHowto" class="modal" aria-hidden="true">
-  <div class="panel">
-    <h2>How to Play</h2>
-    <p>Run a tiny power grid. Each second, demand changes by time‑of‑day and customer type. Toggle generators, build new ones, and decide which customer contracts to accept.</p>
-    <ul>
-      <li><strong>Reserve:</strong> The game computes reserve headroom from online capacity, the largest unit, and upcoming ramps before calling it unsafe.</li>
-      <li><strong>Warning window:</strong> Overload or unsafe frequency starts a 45s countdown instead of instant failure.</li>
-      <li><strong>Starting fleet:</strong> Coal 60 MW; <strong>Four gas turbines</strong> at 10 MW each; Wind 0–30 MW; Solar 0–25 MW.</li>
-      <li><strong>Businesses:</strong> Stores, offices, factories, and datacenters can be turned off individually in the Customers list.</li>
-    </ul>
-    <div class="hr"></div>
-    <div class="small muted">Tip: Use gas as a fast balancer, coal for base, ride renewables, and keep a battery for spikes.</div>
-    <button class="btn close" data-close="#modalHowto">Got it</button>
-  </div>
-</div>
+				<section class="card">
+					<div class="section-title">
+						<div class="tight">
+							<strong>Operations</strong>
+							<span class="pill" id="clock">Day 1 — 06:00</span>
+							<span class="pill bad" id="overloadPill" style="display:none">OVERLOAD — fix in <span
+									id="overloadRemain">45</span>s</span>
+						</div>
+						<div class="tight">
+							<button id="openBuild" class="btn">Build</button>
+							<button id="openOffers" class="btn">Contracts</button>
+							<button id="openUpgrades" class="btn">Upgrades</button>
+						</div>
+					</div>
 
-<!-- Build Modal -->
-<div id="modalBuild" class="modal" aria-hidden="true">
-  <div class="panel">
-    <h2>Build New Generation</h2>
-    <table class="table" id="buildTable">
-      <thead><tr><th>Type</th><th>Cap</th><th>Startup</th><th>OPEX</th><th>Emissions</th><th>Build Time</th><th>CAPEX</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <div class="hr"></div>
-    <h3>In Construction</h3>
-    <div id="buildQueue"></div>
-    <button class="btn close" data-close="#modalBuild" style="margin-top:10px">Close</button>
-  </div>
-</div>
+					<div class="split">
+						<div>
+							<div class="section-title">
+								<div><strong>Generators</strong><span class="pill">Toggle units</span></div><span
+									class="pill small">OPEX $/tick</span>
+							</div>
+							<div class="list" id="genList"></div>
+							<div class="help">Thermal units have startup delays; renewables vary; batteries auto
+								charge/discharge when
+								enabled.</div>
+						</div>
+						<div>
+							<div class="section-title">
+								<div><strong>Customers</strong><span class="pill">Connect / disconnect</span></div><span
+									class="pill small">Contracted MW</span>
+							</div>
+							<div class="list" id="custList"></div>
+							<div class="help">Businesses (retail, office, factory, datacenter) can be turned off
+								individually via
+								their switches.</div>
+						</div>
+					</div>
+				</section>
+			</div>
+		</div>
 
-<!-- Offers Modal -->
-<div id="modalOffers" class="modal" aria-hidden="true">
-  <div class="panel">
-    <h2>Customer Contract Offers</h2>
-    <div id="offersArea"></div>
-    <button class="btn close" data-close="#modalOffers" style="margin-top:10px">Close</button>
-  </div>
-</div>
+		<!-- Toast -->
+		<div id="toast" class="toast"></div>
 
-<!-- Upgrades Modal -->
-<div id="modalUpgrades" class="modal" aria-hidden="true">
-  <div class="panel">
-    <h2>Upgrades</h2>
-    <div id="upgradesArea"></div>
-    <button class="btn close" data-close="#modalUpgrades" style="margin-top:10px">Close</button>
-  </div>
-</div>
+		<!-- How To -->
+		<div id="modalHowto" class="modal" aria-hidden="true">
+			<div class="panel">
+				<h2>How to Play</h2>
+				<p>Run a tiny power grid. Each second, demand changes by time‑of‑day and customer type. Toggle
+					generators, build
+					new ones, and decide which customer contracts to accept.</p>
+				<ul>
+					<li><strong>Reserve:</strong> The game computes reserve headroom from online capacity, the largest
+						unit, and
+						upcoming ramps before calling it unsafe.</li>
+					<li><strong>Warning window:</strong> Overload or unsafe frequency starts a 45s countdown instead of
+						instant
+						failure.</li>
+					<li><strong>Starting fleet:</strong> Coal 60 MW; <strong>Four gas turbines</strong> at 10 MW each;
+						Wind 0–30
+						MW; Solar 0–25 MW.</li>
+					<li><strong>Businesses:</strong> Stores, offices, factories, and datacenters can be turned off
+						individually in
+						the Customers list.</li>
+				</ul>
+				<div class="hr"></div>
+				<div class="small muted">Tip: Use gas as a fast balancer, coal for base, ride renewables, and keep a
+					battery for
+					spikes.</div>
+				<button class="btn close" data-close="#modalHowto">Got it</button>
+			</div>
+		</div>
 
-<!-- Game Over Modal -->
-<div id="modalGameOver" class="modal" aria-hidden="true">
-  <div class="panel">
-    <h2 id="goTitle">Game Over</h2>
-    <p id="goMsg" class="muted"></p>
-    <div class="hr"></div>
-    <h3>Scorecard</h3>
-    <table class="table" id="scoreTable"></table>
-    <div class="hr"></div>
-    <h3>Global Leaderboard</h3>
-    <p class="muted small">Save your final score to compare with other players.</p>
-    <div class="leaderboard-form" id="leaderboardForm">
-      <label for="leaderName" class="muted small">Player name (optional)</label>
-      <div class="leaderboard-actions">
-        <input id="leaderName" class="text-input" type="text" maxlength="32" placeholder="Your name" autocomplete="off" />
-        <button id="saveScoreBtn" class="btn" type="button">Save Score</button>
-      </div>
-      <div id="leaderSaveStatus" class="small muted" aria-live="polite"></div>
-    </div>
-    <table class="table" id="leaderTable"></table>
-    <a href="/games/power-grid-tycoon/leaderboard" class="btn" style="display:inline-block;margin-top:10px;">View Full Leaderboard</a>
-    <button class="btn close" data-close="#modalGameOver" style="margin-top:10px">Close</button>
-  </div>
-</div>
-    <script type="module" src="/js/power-grid-tycoon.js"></script>
-  </body>
+		<!-- Build Modal -->
+		<div id="modalBuild" class="modal" aria-hidden="true">
+			<div class="panel">
+				<h2>Build New Generation</h2>
+				<table class="table" id="buildTable">
+					<thead>
+						<tr>
+							<th>Type</th>
+							<th>Cap</th>
+							<th>Startup</th>
+							<th>OPEX</th>
+							<th>Emissions</th>
+							<th>Build Time</th>
+							<th>CAPEX</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody></tbody>
+				</table>
+				<div class="hr"></div>
+				<h3>In Construction</h3>
+				<div id="buildQueue"></div>
+				<button class="btn close" data-close="#modalBuild" style="margin-top:10px">Close</button>
+			</div>
+		</div>
+
+		<!-- Offers Modal -->
+		<div id="modalOffers" class="modal" aria-hidden="true">
+			<div class="panel">
+				<h2>Customer Contract Offers</h2>
+				<div id="offersArea"></div>
+				<button class="btn close" data-close="#modalOffers" style="margin-top:10px">Close</button>
+			</div>
+		</div>
+
+		<!-- Upgrades Modal -->
+		<div id="modalUpgrades" class="modal" aria-hidden="true">
+			<div class="panel">
+				<h2>Upgrades</h2>
+				<div id="upgradesArea"></div>
+				<button class="btn close" data-close="#modalUpgrades" style="margin-top:10px">Close</button>
+			</div>
+		</div>
+
+		<!-- Game Over Modal -->
+		<div id="modalGameOver" class="modal" aria-hidden="true">
+			<div class="panel">
+				<h2 id="goTitle">Game Over</h2>
+				<p id="goMsg" class="muted"></p>
+				<div class="hr"></div>
+				<h3>Scorecard</h3>
+				<table class="table" id="scoreTable"></table>
+				<div class="hr"></div>
+				<h3>Global Leaderboard</h3>
+				<p class="muted small">Save your final score to compare with other players.</p>
+				<div class="leaderboard-form" id="leaderboardForm">
+					<label for="leaderName" class="muted small">Player name (optional)</label>
+					<div class="leaderboard-actions">
+						<input id="leaderName" class="text-input" type="text" maxlength="32" placeholder="Your name"
+							autocomplete="off" />
+						<button id="saveScoreBtn" class="btn" type="button">Save Score</button>
+					</div>
+					<div id="leaderSaveStatus" class="small muted" aria-live="polite"></div>
+				</div>
+				<table class="table" id="leaderTable"></table>
+				<a href="/games/power-grid-tycoon/leaderboard" class="btn"
+					style="display:inline-block;margin-top:10px;">View
+					Full Leaderboard</a>
+				<button class="btn close" data-close="#modalGameOver" style="margin-top:10px">Close</button>
+			</div>
+		</div>
+		<script type="module" src="/js/power-grid-tycoon.js"></script>
+</body>
+
 </html>
