@@ -11,6 +11,10 @@ const configuredDataFile = process.env.POWER_GRID_LEADERBOARD_FILE
 const defaultDataDir = path.join(__dirname, '..', 'data');
 const dataFile = configuredDataFile || path.join(defaultDataDir, 'power-grid-tycoon-leaderboard.json');
 const dataDir = path.dirname(dataFile);
+const lockFile = `${dataFile}.lock`;
+
+const LOCK_RETRY_DELAY_MS = 25;
+const LOCK_STALE_THRESHOLD_MS = 15_000;
 
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
@@ -23,8 +27,51 @@ async function ensureStore() {
   }
 }
 
-async function loadEntries() {
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function acquireLock() {
+  while (true) {
+    try {
+      return await fs.open(lockFile, 'wx');
+    } catch (error) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+
+      let lockStats;
+      try {
+        lockStats = await fs.stat(lockFile);
+      } catch (statError) {
+        if (statError?.code === 'ENOENT') {
+          continue;
+        }
+        throw statError;
+      }
+
+      if (Date.now() - lockStats.mtimeMs > LOCK_STALE_THRESHOLD_MS) {
+        await fs.unlink(lockFile).catch(() => {});
+        continue;
+      }
+
+      await wait(LOCK_RETRY_DELAY_MS);
+    }
+  }
+}
+
+async function withFileLock(operation) {
   await ensureStore();
+  const handle = await acquireLock();
+  try {
+    return await operation();
+  } finally {
+    try {
+      await handle.close();
+    } catch {}
+    await fs.unlink(lockFile).catch(() => {});
+  }
+}
+
+async function loadEntries() {
   try {
     const raw = await fs.readFile(dataFile, 'utf-8');
     const parsed = JSON.parse(raw);
@@ -35,7 +82,6 @@ async function loadEntries() {
 }
 
 async function saveEntries(entries) {
-  await ensureStore();
   await fs.writeFile(dataFile, JSON.stringify(entries, null, 2), 'utf-8');
 }
 
@@ -45,6 +91,10 @@ function enqueueSerialized(operation) {
   const run = queue.then(() => operation(), () => operation());
   queue = run.catch(() => {});
   return run;
+}
+
+function runWithExclusiveAccess(operation) {
+  return enqueueSerialized(() => withFileLock(operation));
 }
 
 function sanitizeComputedEntry(raw) {
@@ -78,7 +128,7 @@ function sanitizeComputedEntry(raw) {
 }
 
 export async function getLeaderboard(limit) {
-  return enqueueSerialized(async () => {
+  return runWithExclusiveAccess(async () => {
     const entries = await loadEntries();
     entries.sort((a, b) => b.score - a.score);
     if (limit && Number.isFinite(Number(limit))) {
@@ -90,7 +140,7 @@ export async function getLeaderboard(limit) {
 
 export async function appendLeaderboardEntry(rawEntry) {
   const entry = sanitizeComputedEntry(rawEntry ?? {});
-  return enqueueSerialized(async () => {
+  return runWithExclusiveAccess(async () => {
     const entries = await loadEntries();
     entries.push(entry);
     entries.sort((a, b) => b.score - a.score);
