@@ -35,7 +35,7 @@ body {
         width: 90%;
         max-width: 1800px;
         margin: 0 auto;
-        padding: 160px 20px 120px
+        padding: 140px 20px 120px
 }
 
 .game-layout {
@@ -44,9 +44,30 @@ body {
         gap: 24px;
 }
 
+.season-column {
+        flex: 0 0 280px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        position: sticky;
+        top: 120px;
+        align-self: flex-start;
+}
+
 .game-main {
         flex: 1 1 auto;
         min-width: 0;
+}
+
+.main-panels {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+}
+
+.status-card {
+        display: flex;
+        flex-direction: column;
 }
 
 .notification-sidebar {
@@ -61,8 +82,9 @@ body {
         flex-direction: column;
         gap: 12px;
         position: sticky;
-        top: 160px;
-        max-height: calc(100vh - 220px);
+        top: 120px;
+        max-height: 90vh;
+        height: 90vh;
 }
 
 .notification-sidebar__header {
@@ -131,15 +153,11 @@ body {
 }
 
 #seasonHud {
-        position: fixed;
-        top: 92px;
-        left: calc((100vw - min(90vw, 1800px)) / 2 + 20px);
-        z-index: 1000;
         background: linear-gradient(180deg, var(--panel), var(--panel-2));
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 16px 20px;
-        min-width: 240px;
+        min-width: 0;
         box-shadow: 0 15px 35px rgba(0, 0, 0, .45);
         display: flex;
         flex-direction: column;
@@ -257,25 +275,32 @@ h1 {
 	color: var(--muted)
 }
 
-.grid {
-	display: grid;
-	grid-template-columns: 1.25fr 1fr;
-	gap: 16px
+.card {
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, .25)
 }
 
-.card {
-	background: linear-gradient(180deg, var(--panel), var(--panel-2));
-	border: 1px solid var(--border);
-	border-radius: 16px;
-	padding: 16px;
-	box-shadow: 0 10px 30px rgba(0, 0, 0, .25)
+.kpi-card {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+}
+
+.section-heading {
+        margin: 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--muted);
 }
 
 .kpis {
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 12px;
-	margin-bottom: 12px
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
 }
 
 .kpi {
@@ -890,28 +915,22 @@ canvas {
                 flex-direction: column;
         }
 
+        .season-column {
+                position: static;
+                width: 100%;
+                flex: 1 1 auto;
+        }
+
         .notification-sidebar {
                 position: static;
                 width: 100%;
                 max-width: none;
                 max-height: none;
-        }
-
-        .kpis {
-                grid-template-columns: repeat(4, 1fr)
-        }
-
-        .grid {
-                grid-template-columns: 1fr
-        }
-
-        #seasonHud {
-                left: calc((100vw - min(94vw, 1800px)) / 2 + 16px);
-                min-width: 220px;
+                height: auto;
         }
 
         .container {
-                padding-top: 180px;
+                padding-top: 120px;
         }
 }
 
@@ -934,12 +953,11 @@ canvas {
         }
 
         #seasonHud {
-                position: fixed;
-                top: 84px;
-                left: 16px;
-                right: 16px;
-                min-width: auto;
                 padding: 14px 16px;
+        }
+
+        .season-column {
+                gap: 12px;
         }
 
         .hud-metrics {
@@ -954,7 +972,7 @@ canvas {
         }
 
         .container {
-                padding-top: 220px;
+                padding-top: 140px;
         }
 }
 
