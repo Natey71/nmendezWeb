@@ -9,6 +9,13 @@
 import { applyEventAdjustments, finalizeSupplyDemandBalance } from './power-grid-sim-core.js';
 import { createSupplyDemandToleranceTracker } from './supply-demand-tolerance.js';
 import { computeReserveRequirement } from './reserve-requirement.js';
+import {
+  CUSTOMER_MARKUP_RATE,
+  createFuelSpendTracker,
+  recordFuelSpend,
+  resetFuelSpendTracker,
+  computeCustomerPayment
+} from './power-grid-economy.js';
 
 (function(){
   // ---------- Utilities ----------
@@ -229,6 +236,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   let lastSeasonSkin = null;
   let notificationLog = [];
   let dailyAtmosphere = null;
+  let hourlyFuelSpend = createFuelSpendTracker();
 
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
@@ -283,6 +291,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     t=0; day=1; seasonIndex=0;
     secondsInDay = Math.round(DAY_SECONDS * (6/24)); // start at 06:00
     resetHourlyStats(hourIndexFromSeconds(secondsInDay));
+    hourlyFuelSpend = resetFuelSpendTracker(hourlyFuelSpend);
     freq=TARGET_HZ; price=80; cash=250000; rep=50;
     totalDeliveredMWh=0; totalEmissionsT=0; totalOpex=0; totalRevenue=0; profit=0;
     uptimeTicks=0; ticks=0; history=[]; runTelemetry=[]; latestResult=null;
@@ -952,6 +961,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
 
     const hourIndex = hourIndexFromSeconds(secondsInDay);
     if(hourIndex !== currentHourIndex){
+      finalizeHourlyCustomerBilling();
       resetHourlyStats(hourIndex);
     }
     // 1) Demand
@@ -1009,7 +1019,6 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     price = computePrice(demand, supply);
     const delivered = Math.max(0, Math.min(supply, demand)); // MW served
     const tickHours = 1/3600 * speed; // 1-second ticks scaled by speed
-    const revenue = delivered * price * tickHours * DIFFICULTY[difficulty].payoutMul;
 
     // OPEX and emissions
     let opex = 0, emissions = 0;
@@ -1018,7 +1027,13 @@ import { computeReserveRequirement } from './reserve-requirement.js';
         if(Math.abs(g.actual)>0) opex += g.opex*0.5;
       }else if(g.on && (g.enabled||g.variable) && !g.fault){
         const mult = fuelMultipliers[g.fuel]||1;
-        if((g.actual||0)>0 || g.variable) opex += g.opex * mult;
+        if((g.actual||0)>0 || g.variable){
+          const fuelCost = g.opex * mult;
+          opex += fuelCost;
+          if(g.fuel === 'gas' || g.fuel === 'coal'){
+            hourlyFuelSpend = recordFuelSpend(hourlyFuelSpend, g.fuel, fuelCost);
+          }
+        }
         emissions += (g.co2/1000) * (Math.max(0,g.actual) * tickHours);
       }
     }
@@ -1031,9 +1046,9 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     totalEmissionsT += emissions;
     totalDeliveredMWh += delivered * tickHours;
 
-    const income = revenue - opex;
+    const revenue = 0;
+    const income = -opex;
     cash += income;
-    totalRevenue += revenue;
     profit = totalRevenue - totalOpex;
 
     accumulatePeriodTotals(dailyTotals, { demand, supply, delivered, revenue, opex, income, emissions, tickHours });
@@ -1141,6 +1156,25 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     currentHourIndex = Number.isFinite(hourIndex) ? hourIndex : 0;
     hourlyTotals = { demand:0, supply:0, income:0, ticks:0 };
     hourlyAverages = { demand:0, supply:0, income:0 };
+  }
+
+  function countActiveCustomers(){
+    return customers.filter(c=>c.connected).length;
+  }
+
+  function finalizeHourlyCustomerBilling(){
+    const payment = computeCustomerPayment({ tracker: hourlyFuelSpend, activeCustomers: countActiveCustomers() });
+    if(payment > 0){
+      cash += payment;
+      totalRevenue += payment;
+      profit = totalRevenue - totalOpex;
+      const summary = { demand:0, supply:0, delivered:0, revenue:payment, opex:0, income:payment, emissions:0, tickHours:0 };
+      accumulatePeriodTotals(dailyTotals, summary);
+      accumulatePeriodTotals(seasonTotals, summary);
+      const markupPct = Math.round(CUSTOMER_MARKUP_RATE * 100);
+      logNotification(`Customer payments received: ${formatMoney(payment)} (markup ${markupPct}%).`);
+    }
+    hourlyFuelSpend = resetFuelSpendTracker(hourlyFuelSpend);
   }
 
   function formatHourlyIncome(value){
