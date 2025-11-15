@@ -14,7 +14,7 @@
   <header>
     <div>
       <h1>Grid Tycoon — Mini Power Manager</h1>
-      <div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your grid. Up to <strong>+18% reserve</strong> supply is allowed.</div>
+      <div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your grid. An adaptive reserve margin adjusts with online capacity and forecast ramps.</div>
     </div>
     <div class="controls">
       <button id="startBtn" class="btn">Start</button>
@@ -72,7 +72,7 @@
             </div>
           </div>
           <div class="dial-caption">Grid Frequency
-            <div style="font-size:11px;color:#9fb0ff">58.5–61.5 Hz safe • Oversupply ≤ <strong>18%</strong> counts as reserve</div>
+            <div style="font-size:11px;color:#9fb0ff">58.5–61.5 Hz safe • Moderate oversupply within the dynamic reserve band is tolerated</div>
           </div>
         </div>
         <div style="flex:1;min-width:320px">
@@ -130,7 +130,7 @@
     <h2>How to Play</h2>
     <p>Run a tiny power grid. Each second, demand changes by time‑of‑day and customer type. Toggle generators, build new ones, and decide which customer contracts to accept.</p>
     <ul>
-      <li><strong>Reserve:</strong> Oversupply up to 18% of demand counts as spinning reserve and does not harm stability.</li>
+      <li><strong>Reserve:</strong> The game computes reserve headroom from online capacity, the largest unit, and upcoming ramps before calling it unsafe.</li>
       <li><strong>Warning window:</strong> Overload or unsafe frequency starts a 45s countdown instead of instant failure.</li>
       <li><strong>Starting fleet:</strong> Coal 60 MW; <strong>Four gas turbines</strong> at 10 MW each; Wind 0–30 MW; Solar 0–25 MW.</li>
       <li><strong>Businesses:</strong> Stores, offices, factories, and datacenters can be turned off individually in the Customers list.</li>

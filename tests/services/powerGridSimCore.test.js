@@ -37,7 +37,7 @@ describe('power-grid sim core', () => {
       demand: 70,
       generators,
       events,
-      reservePct: 0.18,
+      reserveMW: 12,
       batteryDispatch
     });
 
