@@ -31,6 +31,7 @@
   const genList = el('#genList'), custList = el('#custList');
   const buildTbody = el('#buildTable tbody'), buildQueueEl = el('#buildQueue');
   const offersArea = el('#offersArea'), upgradesArea = el('#upgradesArea');
+  const leaderNameInput = el('#leaderName'), leaderSaveBtn = el('#saveScoreBtn'), leaderSaveStatus = el('#leaderSaveStatus');
 
   // ---------- Config ----------
   const TICK_MS_BASE = 1000;
@@ -73,6 +74,9 @@
   let totalDeliveredMWh=0, totalEmissionsT=0, totalOpex=0, totalRevenue=0, profit=0;
   let uptimeTicks=0, ticks=0;
   let history = [];
+  let leaderboardEntries = [];
+  let latestResult = null;
+  let leaderboardSaving = false;
 
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
@@ -899,28 +903,113 @@ function updateGasFleetUI(){
       tr.innerHTML = `<th>${r[0]}</th><td>${r[1]}</td>`;
       st.appendChild(tr);
     });
-    // store leaderboard
-    const key='grid-tycoon-leaderboard';
-    const lb = JSON.parse(localStorage.getItem(key)||'[]');
-    lb.push({ when:Date.now(), score, profit, uptime: ticks?Math.round(100*uptimeTicks/ticks):0, emissions: totalEmissionsT });
-    lb.sort((a,b)=>b.score-a.score); while(lb.length>8) lb.pop();
-    localStorage.setItem(key, JSON.stringify(lb));
-    renderLeaderboard(lb);
+    prepareLeaderboardSave({
+      score,
+      profit,
+      uptime: ticks?Math.round(100*uptimeTicks/ticks):0,
+      emissions: Math.round(totalEmissionsT)
+    });
+    renderLeaderboard();
+    loadLeaderboard();
     el('#goTitle').textContent = victory?'You made it!':'Game Over';
     el('#goMsg').textContent = reason;
     openModal('#modalGameOver');
   }
-// Function: renderLeaderboard(lb) — purpose: [describe]. Returns: [value/void].
-  function renderLeaderboard(lb){
-    const lt = el('#leaderTable'); lt.innerHTML='';
+// Function: renderLeaderboard() - purpose: [describe]. Returns: [value/void].
+  function renderLeaderboard(){
+    const lt = el('#leaderTable'); if(!lt) return;
+    lt.innerHTML='';
     const head = document.createElement('tr');
-    head.innerHTML='<th>Rank</th><th>Score</th><th>Profit</th><th>Uptime</th><th>Emissions</th>';
+    head.innerHTML='<th>Rank</th><th>Name</th><th>Score</th><th>Profit</th><th>Uptime</th><th>Emissions</th>';
     lt.appendChild(head);
-    lb.forEach((r,i)=>{
+    if(!leaderboardEntries.length){
+      const empty=document.createElement('tr');
+      empty.innerHTML = '<td colspan="6" class="muted">No saved runs yet.</td>';
+      lt.appendChild(empty);
+      return;
+    }
+    leaderboardEntries.forEach((r,i)=>{
       const tr=document.createElement('tr');
-      tr.innerHTML = `<td>${i+1}</td><td>${fmt(r.score)}</td><td>$${fmt(r.profit)}</td><td>${r.uptime}%</td><td>${fmt(Math.round(r.emissions))} t</td>`;
+      const name = r && typeof r.name==='string' ? r.name : 'Unknown';
+      const uptime = Number.isFinite(r?.uptime) ? Math.round(r.uptime) : 0;
+      tr.innerHTML = `<td>${i+1}</td><td>${name}</td><td>${fmt(r?.score||0)}</td><td>$${fmt(r?.profit||0)}</td><td>${uptime}%</td><td>${fmt(Math.round(r?.emissions||0))} t</td>`;
       lt.appendChild(tr);
     });
+  }
+
+  async function loadLeaderboard(){
+    try{
+      const res = await fetch('/games/power-grid-tycoon/leaderboard/data?limit=10');
+      if(!res.ok) throw new Error('Failed to load leaderboard');
+      const data = await res.json();
+      leaderboardEntries = Array.isArray(data?.entries)?data.entries:[];
+      renderLeaderboard();
+    }catch(err){
+      console.error('Failed to load leaderboard', err);
+    }
+  }
+
+  function setLeaderboardStatus(text='', tone){
+    if(!leaderSaveStatus) return;
+    leaderSaveStatus.textContent = text;
+    leaderSaveStatus.classList.remove('bad','good');
+    if(tone==='error') leaderSaveStatus.classList.add('bad');
+    if(tone==='success') leaderSaveStatus.classList.add('good');
+  }
+
+  function prepareLeaderboardSave(result){
+    latestResult = result;
+    leaderboardSaving = false;
+    setLeaderboardStatus(result ? 'Enter a name to save your score.' : 'Finish a run to save your score.');
+    if(!leaderNameInput || !leaderSaveBtn) return;
+    leaderNameInput.value = '';
+    leaderSaveBtn.textContent = 'Save Score';
+    if(result){
+      leaderNameInput.disabled = false;
+      leaderSaveBtn.disabled = false;
+    }else{
+      leaderNameInput.disabled = true;
+      leaderSaveBtn.disabled = true;
+    }
+  }
+
+  async function saveLeaderboardEntry(){
+    if(!leaderSaveBtn) return;
+    if(!latestResult){
+      setLeaderboardStatus('Finish a run before saving.', 'error');
+      return;
+    }
+    if(leaderboardSaving) return;
+    leaderboardSaving = true;
+    leaderSaveBtn.disabled = true;
+    leaderSaveBtn.textContent = 'Saving...';
+    setLeaderboardStatus('Saving score...');
+    const payload = {
+      ...latestResult,
+      name: leaderNameInput ? leaderNameInput.value.trim() : ''
+    };
+    try{
+      const res = await fetch('/games/power-grid-tycoon/leaderboard', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok) throw new Error('Failed to save');
+      const data = await res.json();
+      leaderboardEntries = Array.isArray(data?.entries)?data.entries:leaderboardEntries;
+      renderLeaderboard();
+      latestResult = null;
+      setLeaderboardStatus('Saved! Thanks for playing.', 'success');
+      if(leaderNameInput) leaderNameInput.disabled = true;
+      leaderSaveBtn.textContent = 'Saved';
+    }catch(err){
+      console.error('Failed to save leaderboard entry', err);
+      setLeaderboardStatus('Unable to save score. Please try again.', 'error');
+      leaderSaveBtn.disabled = false;
+      leaderSaveBtn.textContent = 'Save Score';
+    }finally{
+      leaderboardSaving = false;
+    }
   }
 
   // ---------- Loop Controls ----------
@@ -977,8 +1066,10 @@ function updateGasFleetUI(){
   els('.close').forEach(btn=> btn.addEventListener('click', ()=> closeModal(btn.getAttribute('data-close'))));
 // UI: Event listener for 'click'
   els('.modal').forEach(m=> m.addEventListener('click', (e)=>{ if(e.target===m) m.style.display='none'; }));
+  if(leaderSaveBtn) leaderSaveBtn.addEventListener('click', saveLeaderboardEntry);
+  if(leaderNameInput) leaderNameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveLeaderboardEntry(); }});
 
-// Function: renderLegend() — purpose: [describe]. Returns: [value/void].
+// Function: renderLegend() - purpose: [describe]. Returns: [value/void].
   function renderLegend(){
     const lg = el('#chartLegend'); if(!lg) return;
     lg.innerHTML = '<div class="legend-item"><span class="legend-swatch" style="background:#6ee7ff"></span> Demand</div>' +
@@ -989,8 +1080,11 @@ function updateGasFleetUI(){
   // ---------- Bootstrap ----------
   initGame();
   renderLegend();
+  prepareLeaderboardSave(null);
+  renderLeaderboard();
+  loadLeaderboard();
 
-  // Draw loop (history) — keep smooth even when paused
+  // Draw loop (history) - keep smooth even when paused
   function rafLoop(){
     drawHistory();
 // Game Loop/Animation: requestAnimationFrame used for per-frame updates

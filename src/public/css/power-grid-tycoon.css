@@ -38,6 +38,10 @@
   .btn:hover{filter:brightness(1.05)}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   select{background:#0e1733;color:var(--text);border:1px solid var(--border);padding:10px 12px;border-radius:10px}
+  .text-input{background:#0e1733;color:var(--text);border:1px solid var(--border);padding:10px 12px;border-radius:10px;font-size:14px}
+  .leaderboard-form{display:flex;flex-direction:column;gap:8px;margin:10px 0 12px}
+  .leaderboard-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .leaderboard-actions .text-input{flex:1;min-width:240px}
   .section-title{display:flex;align-items:center;justify-content:space-between;margin:4px 0 12px;gap:10px}
   .pill{font-size:11px;color:#cde3ff;background:#0e1d3f;border:1px solid var(--border);padding:4px 8px;border-radius:999px;white-space:nowrap}
   .split{display:grid;grid-template-columns:1fr 1fr;gap:12px}

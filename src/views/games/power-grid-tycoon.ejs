@@ -31,6 +31,7 @@
         <option value="4">4×</option>
       </select>
       <button id="howto" class="btn">How to Play</button>
+      <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
     </div>
   </header>
 
@@ -182,8 +183,18 @@
     <h3>Scorecard</h3>
     <table class="table" id="scoreTable"></table>
     <div class="hr"></div>
-    <h3>Local Leaderboard</h3>
+    <h3>Global Leaderboard</h3>
+    <p class="muted small">Save your final score to compare with other players.</p>
+    <div class="leaderboard-form" id="leaderboardForm">
+      <label for="leaderName" class="muted small">Player name (optional)</label>
+      <div class="leaderboard-actions">
+        <input id="leaderName" class="text-input" type="text" maxlength="32" placeholder="Your name" autocomplete="off" />
+        <button id="saveScoreBtn" class="btn" type="button">Save Score</button>
+      </div>
+      <div id="leaderSaveStatus" class="small muted" aria-live="polite"></div>
+    </div>
     <table class="table" id="leaderTable"></table>
+    <a href="/games/power-grid-tycoon/leaderboard" class="btn" style="display:inline-block;margin-top:10px;">View Full Leaderboard</a>
     <button class="btn close" data-close="#modalGameOver" style="margin-top:10px">Close</button>
   </div>
 </div>
