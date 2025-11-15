@@ -23,6 +23,12 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const rand = (a, b) => a + Math.random()*(b-a);
 // Function (arrow): choice(arr) — purpose: [describe].
   const choice = arr => arr[Math.floor(Math.random()*arr.length)];
+  const escapeHtml = (str='') => String(str)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
 
   // ---------- Elements ----------
   const demandEl = el('#demand'), supplyEl = el('#supply'), balanceEl = el('#balance');
@@ -30,6 +36,8 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   const repEl = el('#rep'), uptimeEl = el('#uptime');
   const dLbl = el('#demandLbl'), sLbl = el('#supplyLbl'), dBar = el('#dBar'), sBar = el('#sBar');
   const needle = el('#needle'), toast = el('#toast');
+  const notificationLogEl = el('#notificationLog');
+  const notificationLogWrapperEl = el('#notificationLogWrapper');
   const historyCanvas = el('#history'), ctx = historyCanvas.getContext('2d');
   const seasonHudEl = el('#seasonHud');
   const timerEl = el('#timer'),
@@ -139,6 +147,7 @@ import { computeReserveRequirement } from './reserve-requirement.js';
   let seasonLogEntries = [];
   let totalSeasonsCompleted = 0;
   let lastSeasonSkin = null;
+  let notificationLog = [];
 
   // overload grace state
   let overloadActive=false, overloadRemain=0, overloadReason='';
@@ -203,6 +212,8 @@ import { computeReserveRequirement } from './reserve-requirement.js';
     seasonLogEntries = [];
     totalSeasonsCompleted = 0;
     lastSeasonSkin = null;
+    notificationLog = [];
+    renderNotificationLog();
     renderDailyLog();
     renderSeasonLog();
     if(dailyReportMetricsEl) dailyReportMetricsEl.innerHTML = '';
@@ -1479,6 +1490,49 @@ function updateGasFleetUI(){
     if(timerEl) timerEl.textContent = 'Sandbox';
   }
 
+  function formatLogClock(){
+    const normalized = normalizeDaySeconds(secondsInDay);
+    const hourFloat = (normalized / DAY_SECONDS) * 24;
+    const hh = Math.floor(hourFloat);
+    const mm = Math.floor((hourFloat - hh) * 60);
+    const pad = n => n.toString().padStart(2, '0');
+    return `${pad(hh)}:${pad(mm)}`;
+  }
+
+  function logNotification(message){
+    if(!message) return;
+    const entry = {
+      season: SEASONS[seasonIndex] || SEASONS[0],
+      day: day || 1,
+      gameTime: formatLogClock(),
+      message
+    };
+    notificationLog.push(entry);
+    renderNotificationLog();
+  }
+
+  function renderNotificationLog(){
+    if(!notificationLogEl) return;
+    if(!notificationLog.length){
+      notificationLogEl.innerHTML = '<li class="notification-log__empty">Notifications will appear here.</li>';
+      if(notificationLogWrapperEl) notificationLogWrapperEl.scrollTop = 0;
+      return;
+    }
+
+    const items = notificationLog.map(entry => {
+      const meta = `${entry.season} • Day ${entry.day} • ${entry.gameTime}`;
+      return `<li class="notification-log__item"><span class="notification-log__meta">${escapeHtml(meta)}</span><span class="notification-log__message">${escapeHtml(entry.message)}</span></li>`;
+    }).join('');
+
+    notificationLogEl.innerHTML = items;
+
+    if(notificationLogWrapperEl){
+      requestAnimationFrame(()=>{
+        notificationLogWrapperEl.scrollTop = notificationLogWrapperEl.scrollHeight;
+      });
+    }
+  }
+
 // Function: pushHistory(demand, supply, balance, freq) — purpose: [describe]. Returns: [value/void].
   function pushHistory(demand, supply, balance, freq){
     history.push({demand,supply,balance,freq});
@@ -1709,6 +1763,7 @@ function updateGasFleetUI(){
     clearTimeout(toast._t);
 // Timer: setTimeout — one-shot delayed task
     toast._t = setTimeout(()=> toast.style.display='none', 2400);
+    logNotification(text);
   }
 
   // ---------- Wire UI ----------
