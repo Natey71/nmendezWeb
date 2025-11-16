@@ -14,7 +14,9 @@ import {
   createFuelSpendTracker,
   recordFuelSpend,
   resetFuelSpendTracker,
-  computeCustomerPayment
+  computeCustomerPayment,
+  computeReputationIncomeMultiplier,
+  computeCustomerLoadPenalty
 } from './power-grid-economy.js';
 
 (function(){
@@ -98,7 +100,9 @@ import {
   // ---------- Config ----------
   const TICK_MS_BASE = 1000;
   const SAFE_HZ_MIN = 58.5, SAFE_HZ_MAX = 61.5, TARGET_HZ = 60.0;
-  const DAY_SECONDS = 720;          // 12 real minutes = 24h in-game (1 in-game hour ≈ 30s)
+  const DAY_SECONDS = 240;          // 4 real minutes = 24h in-game (1 in-game hour ≈ 10s)
+  const CUSTOMER_DISCONNECT_GRACE_SECONDS = 3;
+  const CUSTOMER_DISCONNECT_PENALTY_INTERVAL = 3;
   const HISTORY_LEN = 60;           // seconds for chart
   const SEASONS = ['Spring','Summer','Fall','Winter'];
   const DAYS_PER_SEASON = 28;
@@ -360,7 +364,18 @@ import {
 
 // Function: makeCustomer(name, klass, baseMW, profile, volatility=1.0, connected=true) — purpose: [describe]. Returns: [value/void].
   function makeCustomer(name, klass, baseMW, profile, volatility=1.0, connected=true){
-    return { id: 'c-'+Math.random().toString(36).slice(2,8), name, klass, baseMW, profile, volatility, connected, priceAdj:1.0 };
+    return {
+      id: 'c-'+Math.random().toString(36).slice(2,8),
+      name,
+      klass,
+      baseMW,
+      profile,
+      volatility,
+      connected,
+      priceAdj:1.0,
+      disconnectStartTick:null,
+      disconnectPenaltyCount:0
+    };
   }
 
   // ---------- Rendering: Generators ----------
@@ -551,8 +566,42 @@ import {
     const sw = el(`#${c.id}-switch`); if(!sw) return;
     sw.classList.toggle('on', !!c.connected);
     const input=sw.querySelector('input'); if(input) input.checked = !!c.connected;
+    if(c.connected){
+      c.disconnectStartTick = null;
+      c.disconnectPenaltyCount = 0;
+    }else{
+      c.disconnectStartTick = t;
+      c.disconnectPenaltyCount = 0;
+    }
     // minor rep effect for disconnects
     rep = clamp(rep + (c.connected? +1 : -2), 0, 110);
+  }
+
+  function processCustomerDisconnectPenalties(){
+    if(!Array.isArray(customers) || !customers.length) return;
+    for(const c of customers){
+      if(!c || c.connected !== false) continue;
+      if(typeof c.disconnectStartTick !== 'number') continue;
+      const elapsed = Math.max(0, t - c.disconnectStartTick);
+      const overGrace = elapsed - CUSTOMER_DISCONNECT_GRACE_SECONDS;
+      if(overGrace < 0) continue;
+      const penaltySteps = Math.floor(overGrace / CUSTOMER_DISCONNECT_PENALTY_INTERVAL) + 1;
+      const applied = Number.isFinite(c.disconnectPenaltyCount) ? c.disconnectPenaltyCount : 0;
+      if(penaltySteps <= applied) continue;
+      const penaltyAmount = computeCustomerLoadPenalty(c.baseMW);
+      const increments = penaltySteps - applied;
+      for(let i=0;i<increments;i++){
+        applyCustomerDisconnectPenalty(c, penaltyAmount);
+      }
+      c.disconnectPenaltyCount = applied + increments;
+    }
+  }
+
+  function applyCustomerDisconnectPenalty(customer, penaltyAmount){
+    const amount = Math.max(0, Number.isFinite(penaltyAmount) ? penaltyAmount : computeCustomerLoadPenalty(customer?.baseMW));
+    if(amount <= 0) return;
+    rep = clamp(rep - amount, 0, 110);
+    logNotification(`${customer?.name || 'Customer'} upset — reputation −${amount.toFixed(1)} for extended shutdown.`);
   }
 
   // ---------- Buildables / Upgrades ----------
@@ -967,6 +1016,7 @@ import {
       finalizeHourlyCustomerBilling();
       resetHourlyStats(hourIndex);
     }
+    processCustomerDisconnectPenalties();
     // 1) Demand
     let demand = 0;
     for(const c of customers){
@@ -1169,8 +1219,10 @@ import {
       hourIndex: currentHourIndex,
       markup: CUSTOMER_MARKUP_RATE
     });
-    const payment = billing?.amount || 0;
-    if(payment > 0){
+    const basePayment = billing?.amount || 0;
+    if(basePayment > 0){
+      const repMultiplier = computeReputationIncomeMultiplier(rep);
+      const payment = basePayment * repMultiplier;
       cash += payment;
       totalRevenue += payment;
       profit = totalRevenue - totalOpex;
@@ -1178,7 +1230,7 @@ import {
       accumulatePeriodTotals(dailyTotals, summary);
       accumulatePeriodTotals(seasonTotals, summary);
       const markupPct = Math.round(Math.max(0, (billing?.markup ?? CUSTOMER_MARKUP_RATE)) * 100);
-      logNotification(`Customer payments received: ${formatMoney(payment)} (markup ${markupPct}%).`);
+      logNotification(`Customer payments received: ${formatMoney(payment)} (markup ${markupPct}% • rep ×${repMultiplier.toFixed(2)}).`);
     }
     hourlyFuelSpend = resetFuelSpendTracker(hourlyFuelSpend);
   }

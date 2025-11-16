@@ -1,6 +1,22 @@
 const DEFAULT_TRACKER = Object.freeze({ gas: 0, coal: 0 });
 export const CUSTOMER_MARKUP_RATE = 0.2;
 
+const DEFAULT_REPUTATION_RANGE = Object.freeze({ min: 0, max: 110 });
+
+function clampNumber(value, min, max) {
+        const normalized = Number(value);
+        if (!Number.isFinite(normalized)) {
+                return typeof min === 'number' ? min : 0;
+        }
+        if (typeof min === 'number' && normalized < min) {
+                return min;
+        }
+        if (typeof max === 'number' && normalized > max) {
+                return max;
+        }
+        return normalized;
+}
+
 export const CUSTOMER_CLASS_MARKUPS = Object.freeze({
         residential: Object.freeze({ offPeak: 0.04, peak: 0.04 }),
         retail: Object.freeze({ offPeak: 0.08, peak: 0.11 }),
@@ -82,6 +98,34 @@ export function computeCustomerPayment({
 
         const amount = costBasis * (1 + appliedMarkup);
         return { amount, markup: appliedMarkup, customerCount };
+}
+
+export function computeReputationIncomeMultiplier(
+        reputation,
+        { baseMultiplier = 0.8, bonusMultiplier = 1.0 } = {}
+) {
+        const safeBase = Number.isFinite(baseMultiplier) ? baseMultiplier : 1;
+        const safeBonus = Number.isFinite(bonusMultiplier) ? bonusMultiplier : 0;
+        const safeRep = clampNumber(
+                toSafeNumber(reputation),
+                DEFAULT_REPUTATION_RANGE.min,
+                DEFAULT_REPUTATION_RANGE.max
+        );
+        const normalized = safeRep / 100;
+        const multiplier = safeBase + normalized * safeBonus;
+        return Math.max(0, multiplier);
+}
+
+export function computeCustomerLoadPenalty(
+        baseMW,
+        { minPenalty = 0.5, maxPenalty = 12, scale = 10 } = {}
+) {
+        const safeScale = Math.max(1, Number.isFinite(scale) ? scale : 10);
+        const safeMin = Number.isFinite(minPenalty) ? minPenalty : 0.5;
+        const safeMax = Number.isFinite(maxPenalty) ? maxPenalty : 12;
+        const load = Math.max(0, toSafeNumber(baseMW));
+        const penalty = load / safeScale;
+        return clampNumber(penalty, safeMin, safeMax);
 }
 
 export function isPeakHour(hourIndex) {
