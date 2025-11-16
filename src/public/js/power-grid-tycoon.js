@@ -118,44 +118,44 @@ import {
 
   const SEASONAL_CLIMATE = {
     Spring: {
-      sunrise: 6.5,   // ~6:36 AM average in Columbia, SC
-      sunset: 20.0,   // ~7:48 PM
+      sunrise: 6.5,   // ~6:30 AM average in Columbia, SC
+      sunset: 19.0,   // ~7:00 PM
       solarPeak: 0.95,
-      windRange: [9, 22],
+      windRange: [3, 18],
       windRefSpeed: 26,
       lateSeasonWindBoost: 1.12
     },
     Summer: {
-      sunrise: 6.0,  // ~6:09 AM
-      sunset: 20.5,  // ~8:21 PM (most sunlight)
+      sunrise: 6.0,  // ~6:00 AM
+      sunset: 21.0,  // ~9:00 PM (most sunlight)
       solarPeak: 1.05,
-      windRange: [6, 17],
+      windRange: [3, 9],
       windRefSpeed: 24,
       lateSeasonWindBoost: 1.02
     },
     Fall: {
-      sunrise: 7.0,   // ~7:06 AM
+      sunrise: 7.5,   // ~7:30 AM
       sunset: 18.5,   // ~6:30 PM
       solarPeak: 0.9,
-      windRange: [10, 23],
+      windRange: [5, 21],
       windRefSpeed: 27,
       lateSeasonWindBoost: 1.15
     },
     Winter: {
-      sunrise: 7.5,   // ~7:18 AM
-      sunset: 17.5,  // ~5:15 PM
+      sunrise: 8.0,   // ~8:00 AM
+      sunset: 17.25,  // ~5:15 PM
       solarPeak: 0.8,
-      windRange: [5, 15],
+      windRange: [2, 12],
       windRefSpeed: 23,
       lateSeasonWindBoost: 1.05
     }
   };
 
   const WEATHER_TYPES = {
-    sunny: { label:'Sunny', solarMultiplier:1.0, windMultiplier:0.95, windSpeedBonus:0 },
-    cloudy: { label:'Cloudy', solarMultiplier:0.75, windMultiplier:1.0, windSpeedBonus:-0.5 },
-    rainy: { label:'Rainy', solarMultiplier:0.55, windMultiplier:1.12, windSpeedBonus:0.8 },
-    winterRain: { label:'Cold Rain', solarMultiplier:0.45, windMultiplier:1.18, windSpeedBonus:1.1 }
+    sunny: { label:'Sunny', solarMultiplier:1.0, windMultiplier:0.7, windSpeedBonus:0 },
+    cloudy: { label:'Cloudy', solarMultiplier:0.75, windMultiplier:1.2, windSpeedBonus:-0.5 },
+    rainy: { label:'Rainy', solarMultiplier:0.55, windMultiplier:1.5, windSpeedBonus:0.8 },
+    winterRain: { label:'Cold Rain', solarMultiplier:0.45, windMultiplier:0.9, windSpeedBonus:1.1 }
   };
 
   const WEATHER_WEIGHTS = {
