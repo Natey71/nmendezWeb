@@ -14,7 +14,8 @@ export function createSupplyDemandToleranceTracker({
       maxPct: band.maxPct,
       thresholdPct: band.thresholdPct,
       name: band.name,
-      duration: band.duration
+      duration: band.duration,
+      guard: typeof band.guard === 'function' ? band.guard : null
     },
     timer: 0,
     currentThreshold: 0
@@ -57,17 +58,36 @@ export function createSupplyDemandToleranceTracker({
     return Math.abs(mismatchRatio);
   }
 
-  function step({ demand = 0, supply = 0 } = {}) {
+  function step({ demand = 0, supply = 0, context = {} } = {}) {
     const safeDemand = demand > 0 ? demand : 1;
     const mismatchRatio = (supply - demand) / safeDemand;
 
     let triggeredState = null;
 
     states.forEach((state) => {
-      const { direction = 'any', duration, name } = state.config;
+      const { direction = 'any', duration, name, guard } = state.config;
       const magnitude = magnitudeForDirection(direction, mismatchRatio);
       const threshold = Math.max(baseTolerancePct, state.currentThreshold || 0);
       const outsideBand = magnitude >= threshold;
+
+      if (typeof guard === 'function') {
+        const guardPayload = {
+          demand,
+          supply,
+          mismatchRatio,
+          magnitude,
+          direction: mismatchRatio >= 0 ? 'oversupply' : 'undersupply',
+          bandDirection: direction,
+          context
+        };
+        const allowed = guard(guardPayload);
+        if (!allowed) {
+          if (state.timer !== 0 || !Number.isFinite(state.currentThreshold)) {
+            resetBand(state);
+          }
+          return;
+        }
+      }
 
       if (outsideBand) {
         state.timer += 1;

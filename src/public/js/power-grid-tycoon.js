@@ -8,7 +8,14 @@
 
 import { applyEventAdjustments, finalizeSupplyDemandBalance } from './power-grid-sim-core.js';
 import { createSupplyDemandToleranceTracker } from './supply-demand-tolerance.js';
+import { computeBatterySaturation, isBatteryFleetFull } from './battery-state.js';
 import { computeReserveRequirement } from './reserve-requirement.js';
+import {
+  clampOutageLevel,
+  computeGasOutageDuration,
+  describeGasOutageLevel,
+  formatOutageDuration
+} from './gas-outage.js';
 import {
   CUSTOMER_MARKUP_RATE,
   createFuelSpendTracker,
@@ -69,11 +76,7 @@ import {
         windInfoEl = el('#hudWindInfo'),
         demandAvgEl = el('#hudDemandAvg'),
         supplyAvgEl = el('#hudSupplyAvg'),
-        incomeAvgEl = el('#hudIncomeAvg'),
-        overloadBanner = el('#overloadBanner'),
-        overloadPill = el('#overloadPill'),
-        overloadRemainEl = el('#overloadRemain'),
-        overloadReasonEl = el('#overloadReason');
+        incomeAvgEl = el('#hudIncomeAvg');
   const genList = el('#genList'), custList = el('#custList');
   const batteryStatusEl = el('#batteryStatus');
   const buildTbody = el('#buildTable tbody'), buildQueueEl = el('#buildQueue');
@@ -115,44 +118,44 @@ import {
 
   const SEASONAL_CLIMATE = {
     Spring: {
-      sunrise: 6.5,   // ~6:36 AM average in Columbia, SC
-      sunset: 20.0,   // ~7:48 PM
+      sunrise: 6.5,   // ~6:30 AM average in Columbia, SC
+      sunset: 19.0,   // ~7:00 PM
       solarPeak: 0.95,
-      windRange: [9, 22],
+      windRange: [3, 18],
       windRefSpeed: 26,
       lateSeasonWindBoost: 1.12
     },
     Summer: {
-      sunrise: 6.0,  // ~6:09 AM
-      sunset: 20.5,  // ~8:21 PM (most sunlight)
+      sunrise: 6.0,  // ~6:00 AM
+      sunset: 21.0,  // ~9:00 PM (most sunlight)
       solarPeak: 1.05,
-      windRange: [6, 17],
+      windRange: [3, 9],
       windRefSpeed: 24,
       lateSeasonWindBoost: 1.02
     },
     Fall: {
-      sunrise: 7.0,   // ~7:06 AM
+      sunrise: 7.5,   // ~7:30 AM
       sunset: 18.5,   // ~6:30 PM
       solarPeak: 0.9,
-      windRange: [10, 23],
+      windRange: [5, 21],
       windRefSpeed: 27,
       lateSeasonWindBoost: 1.15
     },
     Winter: {
-      sunrise: 7.5,   // ~7:18 AM
-      sunset: 17.5,  // ~5:15 PM
+      sunrise: 8.0,   // ~8:00 AM
+      sunset: 17.25,  // ~5:15 PM
       solarPeak: 0.8,
-      windRange: [5, 15],
+      windRange: [2, 12],
       windRefSpeed: 23,
       lateSeasonWindBoost: 1.05
     }
   };
 
   const WEATHER_TYPES = {
-    sunny: { label:'Sunny', solarMultiplier:1.0, windMultiplier:0.95, windSpeedBonus:0 },
-    cloudy: { label:'Cloudy', solarMultiplier:0.75, windMultiplier:1.0, windSpeedBonus:-0.5 },
-    rainy: { label:'Rainy', solarMultiplier:0.55, windMultiplier:1.12, windSpeedBonus:0.8 },
-    winterRain: { label:'Cold Rain', solarMultiplier:0.45, windMultiplier:1.18, windSpeedBonus:1.1 }
+    sunny: { label:'Sunny', solarMultiplier:1.0, windMultiplier:0.7, windSpeedBonus:0 },
+    cloudy: { label:'Cloudy', solarMultiplier:0.75, windMultiplier:1.2, windSpeedBonus:-0.5 },
+    rainy: { label:'Rainy', solarMultiplier:0.55, windMultiplier:1.5, windSpeedBonus:0.8 },
+    winterRain: { label:'Cold Rain', solarMultiplier:0.45, windMultiplier:0.9, windSpeedBonus:1.1 }
   };
 
   const WEATHER_WEIGHTS = {
@@ -179,8 +182,7 @@ import {
     ]
   };
 
-  // Alterations per request
-  const OVERLOAD_GRACE = 45;        // 45s grace to fix overload instead of instant stop
+  const BATTERY_FULL_THRESHOLD = 0.98; // how full storage must be before oversupply trips safety
 
 // SECTION: Configuration object `DIFFICULTY` — tweak constants/knobs here
   const DIFFICULTY = {
@@ -189,11 +191,17 @@ import {
     hard:   { noise: 9, mismatchHzFactor: 0.026, payoutMul: 0.9 }
   };
 
+  const oversupplyGuard = ({ context }) => {
+    const batteriesFull = Boolean(context?.batteriesFull);
+    const beyondReserve = Number(context?.oversupplyBeyondReserve) || 0;
+    return batteriesFull && beyondReserve > 0;
+  };
+
   const SUPPLY_DEMAND_TOLERANCE = {
     baseTolerancePct: 0,
     bands: [
-      { name: 'major oversupply', direction: 'oversupply', minPct: 0.13, maxPct: 0.18, duration: 45 },
-      { name: 'moderate oversupply', direction: 'oversupply', minPct: 0.08, maxPct: 0.12, duration: 60 },
+      { name: 'major oversupply', direction: 'oversupply', minPct: 0.13, maxPct: 0.18, duration: 45, guard: oversupplyGuard },
+      { name: 'moderate oversupply', direction: 'oversupply', minPct: 0.08, maxPct: 0.12, duration: 60, guard: oversupplyGuard },
       { name: 'deficit', direction: 'undersupply', minPct: 0.08, maxPct: 0.08, duration: 90 }
     ]
   };
@@ -241,9 +249,6 @@ import {
   let notificationLog = [];
   let dailyAtmosphere = null;
   let hourlyFuelSpend = createFuelSpendTracker();
-
-  // overload grace state
-  let overloadActive=false, overloadRemain=0, overloadReason='';
 
   const mismatchTracker = createSupplyDemandToleranceTracker(SUPPLY_DEMAND_TOLERANCE);
 
@@ -320,7 +325,6 @@ import {
     if(dailyReportSubtitleEl) dailyReportSubtitleEl.textContent = `${SEASONS[seasonIndex]} — Day ${day}`;
     const initYear = Math.floor(totalSeasonsCompleted / SEASONS.length) + 1;
     if(seasonReportSubtitleEl) seasonReportSubtitleEl.textContent = `${SEASONS[seasonIndex]} • Year ${initYear} (0 days)`;
-    overloadActive=false; overloadRemain=0; overloadReason='';
     mismatchTracker.reset();
     els('.modal').forEach(m=>m.style.display='none');
 
@@ -347,7 +351,8 @@ import {
       id, name, fuel, cap, startup, opex, co2, variable, on, enabled:true, actual:0,
       isBattery: fuel==='battery', // filled when built
       energy:0, energyMax:0, roundTrip:1,
-      age:0, fault:false, maint:1.0, building:false
+      age:0, fault:false, maint:1.0, building:false,
+      gasOutage:false
     };
   }
 // Function: makeBattery({ id, name, power, energyMax, roundTrip, initialEnergy, order }) — purpose: creates a battery generator with
@@ -393,9 +398,14 @@ import {
        const tags = `<span class="tag">${g.fuel}</span>` + (g.variable?`<span class="tag">variable</span>`:'');
        const detailId = `${g.id}-detail`;
        const detailText = `Capacity ${g.cap} MW`;
+       const statusHtml = g.gasOutage
+         ? '<span class="bad">Gas outage</span>'
+         : g.fault
+           ? '<span class="bad">FAULT</span>'
+           : (g.enabled? (g.on?'Online':'OFF') : `Starting (${g._startRemain||g.startup}s)`);
        row.innerHTML = `
          <div class="name">${g.name} ${tags} <div class="muted small" id="${detailId}">${detailText}</div></div>
-         <div class="status">${g.fault?'<span class="bad">FAULT</span>':(g.enabled? (g.on?'Online':'OFF') : `Starting (${g._startRemain||g.startup}s)`)}</div>
+         <div class="status">${statusHtml}</div>
          <div class="status">Out: <strong id="${g.id}-out">0</strong> MW <span class="muted">| OPEX $${g.opex}</span></div>
          <div class="right">
            <label class="switch ${g.on?'on':''}" id="${g.id}-switch" aria-label="Toggle ${g.name}"><input type="checkbox" ${g.on?'checked':''}/><div class="knob"></div></label>
@@ -446,20 +456,22 @@ import {
      const totalOut = gasUnits.reduce((s,g)=> s + Math.max(0,g.actual||0), 0);
      const capEach = gasUnits[0]?.cap || 0;
      const opexEach = gasUnits[0]?.opex || 0;
+     const outageActive = gasUnits.some(g=>g.gasOutage);
      const row = document.createElement('div');
-     row.className = 'row';
+     row.className = 'row gas-fleet';
      row.innerHTML = `
        <div class="name">Gas Turbines (Fleet)
          <span class="tag">gas</span>
+         <div class="muted small">${total} × ${capEach} MW • Startup 3s</div>
        </div>
        <div class="status">Online: <strong id="gas-online">${online}</strong> / ${total}</div>
        <div class="status">Out: <strong id="gas-out">${fmt(totalOut)}</strong> MW <span class="muted">| OPEX $${opexEach} each</span></div>
+       <div class="status${outageActive?' bad':''}" id="gas-outage-status" style="${outageActive?'':'display:none'}">Gas supply outage</div>
        <div class="right">
          <div class="tight small" id="gas-controls">
            ${Array.from({length: total+1}, (_,n)=>`<button class="btn small" data-gas-n="${n}">${n}</button>`).join(' ')}
          </div>
        </div>
-         <div class="muted small">${total} × ${capEach} MW • Startup 3s</div>
        `;
 
      genList.appendChild(row);
@@ -475,13 +487,13 @@ import {
 // Function: setGasFleet(gasUnits, target) — purpose: [describe]. Returns: [value/void].
     function setGasFleet(gasUnits, target){
     // Count units that are ON and not faulted (includes those starting)
-    const active   = gasUnits.filter(g=>g.on && !g.fault);
+    const active   = gasUnits.filter(g=>g.on && !g.fault && !g.gasOutage);
     const current  = active.length;
 
     // Need to start more
     if(target > current){
       const toStart  = target - current;
-      const available = gasUnits.filter(g=>!g.on && !g.fault);
+      const available = gasUnits.filter(g=>!g.on && !g.fault && !g.gasOutage);
       for(let i=0;i<toStart && i<available.length;i++){
         toggleGen(available[i].id);
       }
@@ -505,6 +517,10 @@ import {
 // Function: toggleGen(id) — purpose: [describe]. Returns: [value/void].
   function toggleGen(id){
     const g = generators.find(x=>x.id===id); if(!g) return; // allow toggling during faults; output remains 0 until repaired
+    if(g.gasOutage){
+      toastMsg('Gas supply outage — unit unavailable.');
+      return;
+    }
     if(g.isBattery){ g.on = !g.on; updateSwitchUI(g); return; }
       const turningOn = !g.on;
     g.on = turningOn; updateSwitchUI(g);
@@ -912,18 +928,24 @@ import {
   function maybeEvent(){
     if(t%30!==0) return; // check periodically
     if(Math.random()<0.35){
-      const ev = choice(['storm','trip','fuel-spike','heatwave']);
+      const ev = choice(['storm','trip','fuel-spike','heatwave','gas-outage']);
       switch(ev){
         case 'storm': startEvent({type:'storm', secs:rand(10,20)|0, effect:()=>{}}); break;
         case 'trip':  startEvent({type:'trip', secs:rand(6,12)|0}); break;
         case 'fuel-spike': startEvent({type:'fuel', secs:rand(15,25)|0, fuel: choice(['gas','coal'])}); break;
         case 'heatwave': startEvent({type:'heat', secs:rand(10,18)|0}); break;
+        case 'gas-outage': startEvent({ type:'gas-outage' }); break;
       }
     }
   }
 // Function: startEvent(e) — purpose: [describe]. Returns: [value/void].
   function startEvent(e){
-    e.endAt = t + e.secs; events.push(e);
+    if(!e || !e.type) return;
+    if(e.type==='gas-outage' && !prepareGasOutageEvent(e)) return;
+    const duration = Math.max(1, Math.round(e.secs || 1));
+    e.secs = duration;
+    e.endAt = t + duration;
+    events.push(e);
     if(e.type==='storm'){ toastMsg('Storm front: wind & solar output reduced.'); }
       if(e.type === 'trip'){
         const cand = generators.filter(g=>!g.variable  && !g.isBattery && g.on && !g.fault && g.fuel!=='coal');
@@ -941,6 +963,60 @@ import {
   }
 // Function: applyEventEffects(demand) — purpose: [describe]. Returns: [value/void].
 // Function: cleanupEvents() — purpose: [describe]. Returns: [value/void].
+  function prepareGasOutageEvent(event){
+    if(events.some(ev=>ev?.type==='gas-outage')) return false;
+    const gasUnits = generators.filter(g=>g.fuel==='gas');
+    if(!gasUnits.length) return false;
+    const rolledLevel = Number.isFinite(event?.level) ? event.level : Math.ceil(rand(1, 11));
+    const level = clampOutageLevel(rolledLevel);
+    const duration = computeGasOutageDuration(level);
+    event.level = level;
+    event.secs = duration;
+    event.affectedUnits = gasUnits.map(g=>({
+      id: g.id,
+      wasOn: !!g.on,
+      wasEnabled: !!g.enabled,
+      wasFault: !!g.fault
+    }));
+    gasUnits.forEach(forceGasUnitOutage);
+    const descriptor = describeGasOutageLevel(level);
+    const eta = formatOutageDuration(duration);
+    toastMsg(`${descriptor} gas supply outage (Level ${level}) — estimated ${eta} to resolve.`);
+    return true;
+  }
+
+  function forceGasUnitOutage(g){
+    if(!g) return;
+    g.gasOutage = true;
+    g.fault = true;
+    g.on = false;
+    g.enabled = true;
+    g.actual = 0;
+    g._startRemain = 0;
+    if(g._startTimer){ clearInterval(g._startTimer); g._startTimer = null; }
+    updateSwitchUI(g);
+    updateStatus(g,'<span class="bad">Gas outage</span>');
+  }
+
+  function resolveGasOutage(event){
+    if(!Array.isArray(event?.affectedUnits)) return;
+    for(const state of event.affectedUnits){
+      const g = generators.find(x=>x.id===state.id);
+      if(!g) continue;
+      g.gasOutage = false;
+      g.fault = !!state.wasFault;
+      g.enabled = !!state.wasEnabled;
+      g.on = false;
+      updateSwitchUI(g);
+      if(state.wasOn && !state.wasFault){
+        toggleGen(g.id);
+      }else{
+        updateStatus(g, state.wasFault ? '<span class="bad">FAULT</span>' : 'OFF');
+      }
+    }
+    updateGasFleetUI?.();
+  }
+
   function cleanupEvents(){
     events = events.filter(e=>{
       if(t>=e.endAt){
@@ -949,39 +1025,14 @@ import {
           if(g){ g.fault=false; updateSwitchUI(g); toastMsg(`Unit restored: ${g.name}.`); }
         }
         if(e.type==='fuel'){ fuelMultipliers[e.fuel]=1; toastMsg('Fuel markets normalized.'); }
+        if(e.type==='gas-outage'){
+          resolveGasOutage(e);
+          toastMsg('Gas supply restored. Turbines cleared to restart.');
+        }
         return false;
       }
       return true;
     });
-  }
-
-  // ---------- Overload / Warning ----------
-  function setOverload(active, reason){
-    overloadActive = active;
-    overloadReason = reason||overloadReason;
-    if(active && overloadRemain<=0){ overloadRemain = OVERLOAD_GRACE; }
-    if(overloadBanner) overloadBanner.style.display = active ? 'block' : 'none';
-    if(overloadPill) overloadPill.style.display = 'none';
-    if(active){
-      if(overloadRemainEl) overloadRemainEl.textContent = overloadRemain;
-      if(typeof overloadReasonEl !== 'undefined' && overloadReasonEl) overloadReasonEl.textContent = overloadReason;
-    }
-  }
-// Function: tickOverloadCountdown(unsafe) — purpose: [describe]. Returns: [value/void].
-  function tickOverloadCountdown(unsafe){
-    if(unsafe){
-      if(!overloadActive) setOverload(true, 'Unsafe operation');
-      else {
-        overloadRemain = Math.max(0, overloadRemain-1);
-        overloadRemainEl.textContent = overloadRemain;
-        if(overloadRemain<=0){
-          endGame(false, `Blackout — ${overloadReason}`);
-        }
-      }
-    }else if(overloadActive){
-      // recovered to safe state, cancel warning
-      setOverload(false,'');
-    }
   }
 
   // ---------- Main Tick ----------
@@ -1111,19 +1162,32 @@ import {
     if(delivered>=demand-0.1){ uptimeTicks++; rep = clamp(rep + 0.04, 0, 110); }
     else rep = clamp(rep - 0.15, 0, 110);
 
-    // 6) Safety / overload (replace instant stop with 45s warning window)
-    const imbalanceResult = mismatchTracker.step({ demand, supply });
-    const unsafe = imbalanceResult.triggered;
-    if(unsafe){
+    // 6) Safety / overload — immediately stop if tolerance windows are exceeded
+    const batterySnapshot = computeBatterySaturation(generators);
+    const batteriesFull = isBatteryFleetFull(batterySnapshot, { threshold: BATTERY_FULL_THRESHOLD });
+
+    const imbalanceResult = mismatchTracker.step({
+      demand,
+      supply,
+      context: {
+        batteriesFull,
+        oversupplyBeyondReserve,
+        batteryHeadroom: batterySnapshot.headroom
+      }
+    });
+
+    if(imbalanceResult.triggered){
       const band = imbalanceResult.activeLevel?.name || 'imbalance';
       const direction = imbalanceResult.activeLevel?.direction === 'undersupply' ? 'deficit' : 'oversupply';
-      const pct = Math.abs(imbalanceResult.mismatchRatio) * 100;
-      const pctText = Number.isFinite(pct) ? `${pct.toFixed(1)}%` : '';
-      const durationLabel = imbalanceResult.activeLevel?.duration ? `${imbalanceResult.activeLevel.duration}s band` : 'band';
-      const reason = pctText ? `sustained ${direction} (${band}, ${pctText} mismatch ${durationLabel})` : `sustained ${direction} (${band})`;
-      setOverload(true, reason);
+      const pct = Math.abs(imbalanceResult.mismatchRatio || 0) * 100;
+      const pctText = Number.isFinite(pct) ? `${pct.toFixed(1)}%` : 'unsafe';
+      const durationLabel = imbalanceResult.activeLevel?.duration ? `${imbalanceResult.activeLevel.duration}s` : 'sustained';
+      const baseReason = `sustained ${direction === 'deficit' ? 'demand shortfall' : 'oversupply'} (${band}, ${pctText} mismatch ${durationLabel})`;
+      const reason = direction === 'oversupply' ? `${baseReason} — batteries full` : baseReason;
+      logNotification(`Safety shutdown: ${reason}.`);
+      endGame(false, `Blackout — ${reason}`);
+      return;
     }
-    tickOverloadCountdown(unsafe);
 
     // 7) Autopilot (AGC)
     if(UPGRADES.find(u=>u.id==='agc')?.owned){
@@ -1770,6 +1834,15 @@ function updateGasFleetUI(){
   const totalOut = gasUnits.reduce((s,g)=> s + Math.max(0,g.actual||0), 0);
   const onEl = el('#gas-online'); if(onEl) onEl.textContent = online;
   const outEl = el('#gas-out');   if(outEl) outEl.textContent = fmt(totalOut);
+  const outageEl = el('#gas-outage-status');
+  const outageActive = gasUnits.some(g=>g.gasOutage);
+  if(outageEl){
+    outageEl.style.display = outageActive ? '' : 'none';
+    outageEl.classList.toggle('bad', outageActive);
+    if(outageActive){
+      outageEl.textContent = 'Gas supply outage';
+    }
+  }
 }
 // Function: updateClock() — purpose: [describe]. Returns: [value/void].
   function updateClock(){
