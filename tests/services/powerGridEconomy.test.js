@@ -3,7 +3,9 @@ import {
   createFuelSpendTracker,
   recordFuelSpend,
   resetFuelSpendTracker,
-  computeCustomerPayment
+  computeCustomerPayment,
+  computeReputationIncomeMultiplier,
+  computeCustomerLoadPenalty
 } from '../../src/public/js/power-grid-economy.js';
 
 describe('power grid economy helpers', () => {
@@ -53,5 +55,17 @@ describe('power grid economy helpers', () => {
     const offPeakResult = computeCustomerPayment({ tracker, customers, hourIndex: 10 });
     const expectedOffPeakMarkup = (0.04 + 0.08 + 0.11 + 0.25) / 4;
     expect(offPeakResult.markup).toBeCloseTo(expectedOffPeakMarkup);
+  });
+
+  test('reputation multipliers reward higher reputation while never going negative', () => {
+    expect(computeReputationIncomeMultiplier(-10)).toBeCloseTo(0.8);
+    expect(computeReputationIncomeMultiplier(50)).toBeCloseTo(1.3);
+    expect(computeReputationIncomeMultiplier(110)).toBeCloseTo(1.9);
+  });
+
+  test('customer load penalties scale with contract size and remain bounded', () => {
+    expect(computeCustomerLoadPenalty(2)).toBeCloseTo(0.5);
+    expect(computeCustomerLoadPenalty(30)).toBeCloseTo(3);
+    expect(computeCustomerLoadPenalty(500)).toBeCloseTo(12);
   });
 });
