@@ -7,8 +7,9 @@
 	<title>
 		<%= title %>
 	</title>
-	<link href="/css/output.css" rel="stylesheet" />
-	<link href="/css/power-grid-tycoon.css" rel="stylesheet" />
+        <link href="/css/output.css" rel="stylesheet" />
+        <link href="/css/power-grid-tycoon.css" rel="stylesheet" />
+        <link href="/css/power-grid-tycoon-2d.css" rel="stylesheet" />
 </head>
 
 <body class="bg-white dark:bg-gray-900 min-h-screen">
@@ -19,7 +20,7 @@
                         <div class="game-main">
                                 <header class="page-header">
                                         <div>
-                                                <h1>Grid Tycoon — Mini Power Manager</h1>
+                                                <h1>Grid Tycoon — 2D Command Center</h1>
                                                 <div class="subtitle">Balance supply and demand to hold frequency near 60 Hz while growing your
                                                         grid. An
                                                         adaptive reserve margin adjusts with online capacity and forecast ramps.</div>
@@ -42,9 +43,29 @@
                                                 <button id="openSeasonReport" class="btn">Season Reports</button>
                                                 <button id="howto" class="btn">How to Play</button>
                                                 <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
-                                                <a href="/games/power-grid-tycoon/2d" class="btn">Try the 2D Command Center</a>
+                                                <a href="/games/power-grid-tycoon" class="btn">Return to Classic View</a>
                                         </div>
                                 </header>
+
+                                <section class="card two-d-card" aria-label="2D command center">
+                                        <div class="two-d-layout">
+                                                <div class="two-d-stage">
+                                                        <canvas id="gridCommandCanvas" width="960" height="540" aria-label="Animated 2D representation of the grid"></canvas>
+                                                        <div class="two-d-stage__overlay">
+                                                                <p>The animated map mirrors live demand, supply, storage and event data from the simulation logic without changing how the economy or balancing works. Use it to spot congestion, battery dispatch pulses, and imbalance direction at a glance.</p>
+                                                        </div>
+                                                </div>
+                                                <div class="two-d-legend">
+                                                        <h3>Legend</h3>
+                                                        <ul>
+                                                                <li><span class="legend-dot legend-dot--supply"></span> Online supply nodes scale with the actual MW output reported by the core simulation.</li>
+                                                                <li><span class="legend-dot legend-dot--demand"></span> Demand clusters glow brighter as the load rises and dim when rolling outages occur.</li>
+                                                                <li><span class="legend-dot legend-dot--storage"></span> Storage pulses blue when discharging and purple when absorbing excess energy.</li>
+                                                                <li><span class="legend-line"></span> Flow lines animate in the direction of current to visualize balance drift.</li>
+                                                        </ul>
+                                                </div>
+                                        </div>
+                                </section>
 
                                 <section class="card kpi-card" aria-label="Key performance indicators">
                                         <div class="kpis kpis--horizontal">
@@ -367,7 +388,8 @@
 				<button class="btn close" data-close="#modalGameOver" style="margin-top:10px">Close</button>
 			</div>
 		</div>
-		<script type="module" src="/js/power-grid-tycoon.js"></script>
+        <script type="module" src="/js/power-grid-tycoon.js"></script>
+        <script type="module" src="/js/power-grid-tycoon-2d.js"></script>
 </body>
 
 </html>

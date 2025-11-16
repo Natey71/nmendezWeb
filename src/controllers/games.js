@@ -8,9 +8,15 @@ export const getGamesList = (req, res) => {
 };
 
 export const getPowerGridTycoonPage = (req, res) => {
-	res.render('games/power-grid-tycoon', {
-		title: 'Power Grid Tycoon',
-	});
+        res.render('games/power-grid-tycoon', {
+                title: 'Power Grid Tycoon',
+        });
+};
+
+export const getPowerGridTycoon2DPage = (req, res) => {
+        res.render('games/power-grid-tycoon-2d', {
+                title: 'Power Grid Tycoon — 2D Command Center',
+        });
 };
 
 export const getPowerGridTycoonLeaderboardPage = async (req, res, next) => {
