@@ -1,6 +1,5 @@
 // tests/services/powerGridScoring.test.js
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import assert from 'assert/strict';
 import { scorePowerGridRun } from '../../src/services/powerGridScoring.js';
 
 describe('scorePowerGridRun', () => {
