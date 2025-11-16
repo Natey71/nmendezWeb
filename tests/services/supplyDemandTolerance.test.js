@@ -79,4 +79,31 @@ describe('Supply/demand tolerance tracker', () => {
 
     assert.equal(triggeredAt, 4);
   });
+
+  it('respects guard functions on oversupply bands', () => {
+    const tracker = createSupplyDemandToleranceTracker({
+      bands: [
+        {
+          name: 'overs',
+          direction: 'oversupply',
+          thresholdPct: 0.05,
+          duration: 3,
+          guard: ({ context }) => Boolean(context?.batteriesFull)
+        }
+      ]
+    });
+
+    for (let i = 0; i < 5; i += 1) {
+      const result = tracker.step({ demand: 100, supply: 120, context: { batteriesFull: false } });
+      assert.equal(result.triggered, false);
+    }
+
+    let triggered = false;
+    for (let i = 0; i < 3; i += 1) {
+      const result = tracker.step({ demand: 100, supply: 120, context: { batteriesFull: true } });
+      if (result.triggered) triggered = true;
+    }
+
+    assert.equal(triggered, true);
+  });
 });

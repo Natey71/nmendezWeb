@@ -8,6 +8,7 @@
 
 import { applyEventAdjustments, finalizeSupplyDemandBalance } from './power-grid-sim-core.js';
 import { createSupplyDemandToleranceTracker } from './supply-demand-tolerance.js';
+import { computeBatterySaturation, isBatteryFleetFull } from './battery-state.js';
 import { computeReserveRequirement } from './reserve-requirement.js';
 import {
   clampOutageLevel,
@@ -75,11 +76,7 @@ import {
         windInfoEl = el('#hudWindInfo'),
         demandAvgEl = el('#hudDemandAvg'),
         supplyAvgEl = el('#hudSupplyAvg'),
-        incomeAvgEl = el('#hudIncomeAvg'),
-        overloadBanner = el('#overloadBanner'),
-        overloadPill = el('#overloadPill'),
-        overloadRemainEl = el('#overloadRemain'),
-        overloadReasonEl = el('#overloadReason');
+        incomeAvgEl = el('#hudIncomeAvg');
   const genList = el('#genList'), custList = el('#custList');
   const batteryStatusEl = el('#batteryStatus');
   const buildTbody = el('#buildTable tbody'), buildQueueEl = el('#buildQueue');
@@ -185,8 +182,7 @@ import {
     ]
   };
 
-  // Alterations per request
-  const OVERLOAD_GRACE = 45;        // 45s grace to fix overload instead of instant stop
+  const BATTERY_FULL_THRESHOLD = 0.98; // how full storage must be before oversupply trips safety
 
 // SECTION: Configuration object `DIFFICULTY` — tweak constants/knobs here
   const DIFFICULTY = {
@@ -195,11 +191,17 @@ import {
     hard:   { noise: 9, mismatchHzFactor: 0.026, payoutMul: 0.9 }
   };
 
+  const oversupplyGuard = ({ context }) => {
+    const batteriesFull = Boolean(context?.batteriesFull);
+    const beyondReserve = Number(context?.oversupplyBeyondReserve) || 0;
+    return batteriesFull && beyondReserve > 0;
+  };
+
   const SUPPLY_DEMAND_TOLERANCE = {
     baseTolerancePct: 0,
     bands: [
-      { name: 'major oversupply', direction: 'oversupply', minPct: 0.13, maxPct: 0.18, duration: 45 },
-      { name: 'moderate oversupply', direction: 'oversupply', minPct: 0.08, maxPct: 0.12, duration: 60 },
+      { name: 'major oversupply', direction: 'oversupply', minPct: 0.13, maxPct: 0.18, duration: 45, guard: oversupplyGuard },
+      { name: 'moderate oversupply', direction: 'oversupply', minPct: 0.08, maxPct: 0.12, duration: 60, guard: oversupplyGuard },
       { name: 'deficit', direction: 'undersupply', minPct: 0.08, maxPct: 0.08, duration: 90 }
     ]
   };
@@ -247,9 +249,6 @@ import {
   let notificationLog = [];
   let dailyAtmosphere = null;
   let hourlyFuelSpend = createFuelSpendTracker();
-
-  // overload grace state
-  let overloadActive=false, overloadRemain=0, overloadReason='';
 
   const mismatchTracker = createSupplyDemandToleranceTracker(SUPPLY_DEMAND_TOLERANCE);
 
@@ -326,7 +325,6 @@ import {
     if(dailyReportSubtitleEl) dailyReportSubtitleEl.textContent = `${SEASONS[seasonIndex]} — Day ${day}`;
     const initYear = Math.floor(totalSeasonsCompleted / SEASONS.length) + 1;
     if(seasonReportSubtitleEl) seasonReportSubtitleEl.textContent = `${SEASONS[seasonIndex]} • Year ${initYear} (0 days)`;
-    overloadActive=false; overloadRemain=0; overloadReason='';
     mismatchTracker.reset();
     els('.modal').forEach(m=>m.style.display='none');
 
@@ -1037,35 +1035,6 @@ import {
     });
   }
 
-  // ---------- Overload / Warning ----------
-  function setOverload(active, reason){
-    overloadActive = active;
-    overloadReason = reason||overloadReason;
-    if(active && overloadRemain<=0){ overloadRemain = OVERLOAD_GRACE; }
-    if(overloadBanner) overloadBanner.style.display = active ? 'block' : 'none';
-    if(overloadPill) overloadPill.style.display = 'none';
-    if(active){
-      if(overloadRemainEl) overloadRemainEl.textContent = overloadRemain;
-      if(typeof overloadReasonEl !== 'undefined' && overloadReasonEl) overloadReasonEl.textContent = overloadReason;
-    }
-  }
-// Function: tickOverloadCountdown(unsafe) — purpose: [describe]. Returns: [value/void].
-  function tickOverloadCountdown(unsafe){
-    if(unsafe){
-      if(!overloadActive) setOverload(true, 'Unsafe operation');
-      else {
-        overloadRemain = Math.max(0, overloadRemain-1);
-        overloadRemainEl.textContent = overloadRemain;
-        if(overloadRemain<=0){
-          endGame(false, `Blackout — ${overloadReason}`);
-        }
-      }
-    }else if(overloadActive){
-      // recovered to safe state, cancel warning
-      setOverload(false,'');
-    }
-  }
-
   // ---------- Main Tick ----------
   function tick(){
     ticks++;
@@ -1193,19 +1162,32 @@ import {
     if(delivered>=demand-0.1){ uptimeTicks++; rep = clamp(rep + 0.04, 0, 110); }
     else rep = clamp(rep - 0.15, 0, 110);
 
-    // 6) Safety / overload (replace instant stop with 45s warning window)
-    const imbalanceResult = mismatchTracker.step({ demand, supply });
-    const unsafe = imbalanceResult.triggered;
-    if(unsafe){
+    // 6) Safety / overload — immediately stop if tolerance windows are exceeded
+    const batterySnapshot = computeBatterySaturation(generators);
+    const batteriesFull = isBatteryFleetFull(batterySnapshot, { threshold: BATTERY_FULL_THRESHOLD });
+
+    const imbalanceResult = mismatchTracker.step({
+      demand,
+      supply,
+      context: {
+        batteriesFull,
+        oversupplyBeyondReserve,
+        batteryHeadroom: batterySnapshot.headroom
+      }
+    });
+
+    if(imbalanceResult.triggered){
       const band = imbalanceResult.activeLevel?.name || 'imbalance';
       const direction = imbalanceResult.activeLevel?.direction === 'undersupply' ? 'deficit' : 'oversupply';
-      const pct = Math.abs(imbalanceResult.mismatchRatio) * 100;
-      const pctText = Number.isFinite(pct) ? `${pct.toFixed(1)}%` : '';
-      const durationLabel = imbalanceResult.activeLevel?.duration ? `${imbalanceResult.activeLevel.duration}s band` : 'band';
-      const reason = pctText ? `sustained ${direction} (${band}, ${pctText} mismatch ${durationLabel})` : `sustained ${direction} (${band})`;
-      setOverload(true, reason);
+      const pct = Math.abs(imbalanceResult.mismatchRatio || 0) * 100;
+      const pctText = Number.isFinite(pct) ? `${pct.toFixed(1)}%` : 'unsafe';
+      const durationLabel = imbalanceResult.activeLevel?.duration ? `${imbalanceResult.activeLevel.duration}s` : 'sustained';
+      const baseReason = `sustained ${direction === 'deficit' ? 'demand shortfall' : 'oversupply'} (${band}, ${pctText} mismatch ${durationLabel})`;
+      const reason = direction === 'oversupply' ? `${baseReason} — batteries full` : baseReason;
+      logNotification(`Safety shutdown: ${reason}.`);
+      endGame(false, `Blackout — ${reason}`);
+      return;
     }
-    tickOverloadCountdown(unsafe);
 
     // 7) Autopilot (AGC)
     if(UPGRADES.find(u=>u.id==='agc')?.owned){
