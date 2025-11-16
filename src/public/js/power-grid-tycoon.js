@@ -279,6 +279,7 @@ import {
     customers = [
       makeCustomer('Homes — Oakview', 'residential-block', 35, 'evening-peaker', 1.2, true),
       makeCustomer('Market Street Store', 'retail', 12, 'business-hours', 1.0, true),
+      makeCustomer('HashBlock Mining Co.', 'crypto', 20, 'flat', 1.0, true),
       makeCustomer('Tiny Datacenter', 'datacenter', 18, 'flat', 1.0, true),
     ];
 
@@ -795,7 +796,8 @@ import {
       { klass:'datacenter', base:[12,30], profile:'flat' },
       { klass:'town', base:[25,60], profile:'town' },
       { klass:'retail', base:[6,16], profile:'business-hours' },
-      { klass:'residential-block', base:[12,28], profile:'evening-peaker' }
+      { klass:'residential-block', base:[12,28], profile:'evening-peaker' },
+      { klass:'crypto', base:[18,35], profile:'flat' }
     ];
     const t = choice(types);
     const mw = Math.round(rand(t.base[0], t.base[1]));
@@ -812,6 +814,7 @@ import {
       case 'office': return `${inds[Math.floor(Math.random()*inds.length)]} Offices`;
       case 'town': return `${cities[Math.floor(Math.random()*cities.length)]} Township`;
       case 'retail': return `${cities[Math.floor(Math.random()*cities.length)]} Plaza`;
+      case 'crypto': return `${inds[Math.floor(Math.random()*inds.length)]} Mining Hub`;
       default: return `${cities[Math.floor(Math.random()*cities.length)]} Homes`;
     }
   }
@@ -1158,12 +1161,15 @@ import {
     hourlyAverages = { demand:0, supply:0, income:0 };
   }
 
-  function countActiveCustomers(){
-    return customers.filter(c=>c.connected).length;
-  }
-
   function finalizeHourlyCustomerBilling(){
-    const payment = computeCustomerPayment({ tracker: hourlyFuelSpend, activeCustomers: countActiveCustomers() });
+    const billing = computeCustomerPayment({
+      tracker: hourlyFuelSpend,
+      customers,
+      activeCustomers: 0,
+      hourIndex: currentHourIndex,
+      markup: CUSTOMER_MARKUP_RATE
+    });
+    const payment = billing?.amount || 0;
     if(payment > 0){
       cash += payment;
       totalRevenue += payment;
@@ -1171,7 +1177,7 @@ import {
       const summary = { demand:0, supply:0, delivered:0, revenue:payment, opex:0, income:payment, emissions:0, tickHours:0 };
       accumulatePeriodTotals(dailyTotals, summary);
       accumulatePeriodTotals(seasonTotals, summary);
-      const markupPct = Math.round(CUSTOMER_MARKUP_RATE * 100);
+      const markupPct = Math.round(Math.max(0, (billing?.markup ?? CUSTOMER_MARKUP_RATE)) * 100);
       logNotification(`Customer payments received: ${formatMoney(payment)} (markup ${markupPct}%).`);
     }
     hourlyFuelSpend = resetFuelSpendTracker(hourlyFuelSpend);
