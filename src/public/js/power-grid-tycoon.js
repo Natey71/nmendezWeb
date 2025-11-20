@@ -10,6 +10,7 @@ import { applyEventAdjustments, finalizeSupplyDemandBalance } from './power-grid
 import { createSupplyDemandToleranceTracker } from './supply-demand-tolerance.js';
 import { computeBatterySaturation, isBatteryFleetFull } from './battery-state.js';
 import { computeReserveRequirement } from './reserve-requirement.js';
+import { createOverloadMonitor } from './overload-monitor.js';
 import {
   clampOutageLevel,
   computeGasOutageDuration,
@@ -64,6 +65,11 @@ import {
   const repEl = el('#rep'), uptimeEl = el('#uptime');
   const dLbl = el('#demandLbl'), sLbl = el('#supplyLbl'), dBar = el('#dBar'), sBar = el('#sBar');
   const needle = el('#needle'), toast = el('#toast');
+  const overloadBannerEl = el('#overloadBanner');
+  const overloadPillEl = el('#overloadPill');
+  const overloadReasonEl = el('#overloadReason');
+  const overloadReasonWrapEl = el('#overloadReasonWrap');
+  const overloadRemainEls = els('[data-overload-remaining]');
   const notificationLogEl = el('#notificationLog');
   const notificationLogWrapperEl = el('#notificationLogWrapper');
   const historyCanvas = el('#history'), ctx = historyCanvas.getContext('2d');
@@ -183,6 +189,7 @@ import {
   };
 
   const BATTERY_FULL_THRESHOLD = 0.98; // how full storage must be before oversupply trips safety
+  const OVERLOAD_GRACE_SECONDS = 45;
 
 // SECTION: Configuration object `DIFFICULTY` — tweak constants/knobs here
   const DIFFICULTY = {
@@ -251,6 +258,7 @@ import {
   let hourlyFuelSpend = createFuelSpendTracker();
 
   const mismatchTracker = createSupplyDemandToleranceTracker(SUPPLY_DEMAND_TOLERANCE);
+  const overloadMonitor = createOverloadMonitor({ graceSeconds: OVERLOAD_GRACE_SECONDS });
 
   // Entities
   let generators = [];
@@ -316,6 +324,8 @@ import {
     renderNotificationLog();
     renderDailyLog();
     renderSeasonLog();
+    overloadMonitor.resolve();
+    updateOverloadUI();
     dailyAtmosphere = rollDailyAtmosphere({ announce:false });
     announceDailyAtmosphere();
     if(dailyReportMetricsEl) dailyReportMetricsEl.innerHTML = '';
@@ -1184,9 +1194,24 @@ import {
       const durationLabel = imbalanceResult.activeLevel?.duration ? `${imbalanceResult.activeLevel.duration}s` : 'sustained';
       const baseReason = `sustained ${direction === 'deficit' ? 'demand shortfall' : 'oversupply'} (${band}, ${pctText} mismatch ${durationLabel})`;
       const reason = direction === 'oversupply' ? `${baseReason} — batteries full` : baseReason;
-      logNotification(`Safety shutdown: ${reason}.`);
-      endGame(false, `Blackout — ${reason}`);
-      return;
+      const triggerState = overloadMonitor.trigger(reason);
+
+      if(triggerState.started){
+        logNotification(`Overload — ${reason}. Fix within ${OVERLOAD_GRACE_SECONDS}s.`);
+      }else{
+        const countdownState = overloadMonitor.step();
+        if(countdownState.expired){
+          logNotification(`Safety shutdown: ${reason}.`);
+          updateOverloadUI();
+          endGame(false, `Blackout — ${reason}`);
+          return;
+        }
+      }
+
+      updateOverloadUI();
+    }else if(overloadMonitor.getState().active){
+      overloadMonitor.resolve();
+      updateOverloadUI();
     }
 
     // 7) Autopilot (AGC)
@@ -1825,6 +1850,22 @@ import {
     setButtons();
     updateGasFleetUI?.();
     renderBatteryStatus();
+  }
+
+  function updateOverloadUI(){
+    const state = overloadMonitor.getState();
+    const visible = state.active;
+    const seconds = Math.max(0, Math.ceil(state.remainingSeconds));
+
+    if(overloadBannerEl) overloadBannerEl.style.display = visible ? '' : 'none';
+    if(overloadPillEl) overloadPillEl.style.display = visible ? '' : 'none';
+
+    overloadRemainEls.forEach(el=>{
+      if(el) el.textContent = seconds;
+    });
+
+    if(overloadReasonEl) overloadReasonEl.textContent = state.reason || '';
+    if(overloadReasonWrapEl) overloadReasonWrapEl.style.display = state.reason ? '' : 'none';
   }
 // Function: updateGasFleetUI() — purpose: [describe]. Returns: [value/void].
 function updateGasFleetUI(){
