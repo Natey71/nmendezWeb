@@ -40,6 +40,7 @@ export function createOverloadMonitor({ graceSeconds = 45 } = {}) {
 
     const delta = Number(seconds);
     const deltaSeconds = Number.isFinite(delta) && delta > 0 ? delta : 0;
+    console.log('OverloadMonitor step:', { deltaSeconds, remainingSeconds });
     if (deltaSeconds === 0) {
       return { ...snapshot(), expired: remainingSeconds === 0 };
     }
