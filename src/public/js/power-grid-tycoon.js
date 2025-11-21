@@ -58,6 +58,12 @@ import {
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;');
+  const safeClone = (val) => {
+    if(typeof structuredClone === 'function'){
+      try{ return structuredClone(val); }catch(_err){}
+    }
+    return JSON.parse(JSON.stringify(val));
+  };
 
   // ---------- Elements ----------
   const demandEl = el('#demand'), supplyEl = el('#supply'), balanceEl = el('#balance');
@@ -89,6 +95,15 @@ import {
   const offersArea = el('#offersArea'), upgradesArea = el('#upgradesArea');
   const leaderNameInput = el('#leaderName'), leaderSaveBtn = el('#saveScoreBtn'), leaderSaveStatus = el('#leaderSaveStatus');
   const openDailyReportBtn = el('#openDailyReport'), openSeasonReportBtn = el('#openSeasonReport');
+  const openSaveLoadBtn = el('#openSaveLoad');
+  const saveGameNameInput = el('#saveGameName');
+  const saveGameBtn = el('#saveGameBtn');
+  const saveGameStatusEl = el('#saveGameStatus');
+  const saveGameResultEl = el('#saveGameResult');
+  const loadIdentifierInput = el('#loadIdentifier');
+  const loadCodeInput = el('#loadCode');
+  const loadGameBtn = el('#loadGameBtn');
+  const loadGameStatusEl = el('#loadGameStatus');
   const dailyReportModal = el('#dailyReportModal'),
         dailyReportPanel = el('#dailyReportPanel'),
         dailyReportTitleEl = el('#dailyReportTitle'),
@@ -346,6 +361,145 @@ import {
     updateSeasonSkin();
     applySeasonSkin(dailyReportPanel, SEASONS[seasonIndex]);
     applySeasonSkin(seasonReportPanel, SEASONS[seasonIndex]);
+  }
+
+  function sanitizeGeneratorsForSave(list){
+    return (Array.isArray(list)?list:[]).map(g=>{
+      const copy = { ...g };
+      delete copy._startTimer;
+      delete copy._tickAccum;
+      return copy;
+    });
+  }
+
+  function captureGameSnapshot(){
+    return safeClone({
+      running:false,
+      difficulty,
+      speed,
+      t,
+      day,
+      secondsInDay,
+      seasonIndex,
+      freq,
+      price,
+      cash,
+      rep,
+      totalDeliveredMWh,
+      totalEmissionsT,
+      totalOpex,
+      totalRevenue,
+      profit,
+      uptimeTicks,
+      ticks,
+      history,
+      generators: sanitizeGeneratorsForSave(generators),
+      customers,
+      buildQueue,
+      offers,
+      events,
+      fuelMultipliers,
+      batteryCounter,
+      runTelemetry,
+      currentHourIndex,
+      hourlyTotals,
+      hourlyAverages,
+      dailyTotals,
+      seasonTotals,
+      seasonDayCount,
+      dailyLogEntries,
+      seasonLogEntries,
+      totalSeasonsCompleted,
+      lastSeasonSkin,
+      notificationLog,
+      dailyAtmosphere,
+      hourlyFuelSpend,
+      upgrades: UPGRADES.map(u=>({ id:u.id, owned:!!u.owned }))
+    });
+  }
+
+  function applyLoadedState(snapshot){
+    if(!snapshot || typeof snapshot !== 'object'){ return; }
+    pause();
+    initGame();
+    running=false; clearInterval(timer); timer=null;
+
+    const safeVal = (value, fallback) => (value === undefined ? fallback : value);
+
+    difficulty = snapshot.difficulty || 'normal';
+    speed = Number(snapshot.speed) || 1;
+    const diffSel = el('#difficulty'); if(diffSel) diffSel.value = difficulty;
+    const speedSel = el('#speed'); if(speedSel) speedSel.value = String(speed);
+
+    t = safeVal(snapshot.t, 0);
+    day = safeVal(snapshot.day, 1);
+    secondsInDay = safeVal(snapshot.secondsInDay, 0);
+    seasonIndex = safeVal(snapshot.seasonIndex, 0);
+    freq = safeVal(snapshot.freq, TARGET_HZ);
+    price = safeVal(snapshot.price, 80);
+    cash = safeVal(snapshot.cash, 250000);
+    rep = safeVal(snapshot.rep, 50);
+    totalDeliveredMWh = safeVal(snapshot.totalDeliveredMWh, 0);
+    totalEmissionsT = safeVal(snapshot.totalEmissionsT, 0);
+    totalOpex = safeVal(snapshot.totalOpex, 0);
+    totalRevenue = safeVal(snapshot.totalRevenue, 0);
+    profit = safeVal(snapshot.profit, 0);
+    uptimeTicks = safeVal(snapshot.uptimeTicks, 0);
+    ticks = safeVal(snapshot.ticks, 0);
+
+    history = Array.isArray(snapshot.history) ? snapshot.history : [];
+    generators = Array.isArray(snapshot.generators) ? snapshot.generators.map(g=>({ ...g, _startTimer:null })) : [];
+    customers = Array.isArray(snapshot.customers) ? snapshot.customers : [];
+    buildQueue = Array.isArray(snapshot.buildQueue) ? snapshot.buildQueue : [];
+    offers = Array.isArray(snapshot.offers) ? snapshot.offers : [];
+    events = Array.isArray(snapshot.events) ? snapshot.events : [];
+    fuelMultipliers = snapshot.fuelMultipliers && typeof snapshot.fuelMultipliers==='object' ? snapshot.fuelMultipliers : { coal:1, gas:1 };
+    batteryCounter = Number.isFinite(snapshot.batteryCounter) ? snapshot.batteryCounter : 0;
+    runTelemetry = Array.isArray(snapshot.runTelemetry) ? snapshot.runTelemetry : [];
+    currentHourIndex = Number.isFinite(snapshot.currentHourIndex) ? snapshot.currentHourIndex : hourIndexFromSeconds(secondsInDay);
+    hourlyTotals = snapshot.hourlyTotals && typeof snapshot.hourlyTotals==='object' ? snapshot.hourlyTotals : createPeriodTotals();
+    hourlyAverages = snapshot.hourlyAverages && typeof snapshot.hourlyAverages==='object' ? snapshot.hourlyAverages : { demand:0, supply:0, income:0 };
+    dailyTotals = snapshot.dailyTotals && typeof snapshot.dailyTotals==='object' ? snapshot.dailyTotals : createPeriodTotals();
+    seasonTotals = snapshot.seasonTotals && typeof snapshot.seasonTotals==='object' ? snapshot.seasonTotals : createPeriodTotals();
+    seasonDayCount = Number.isFinite(snapshot.seasonDayCount) ? snapshot.seasonDayCount : 0;
+    dailyLogEntries = Array.isArray(snapshot.dailyLogEntries) ? snapshot.dailyLogEntries : [];
+    seasonLogEntries = Array.isArray(snapshot.seasonLogEntries) ? snapshot.seasonLogEntries : [];
+    totalSeasonsCompleted = Number.isFinite(snapshot.totalSeasonsCompleted) ? snapshot.totalSeasonsCompleted : 0;
+    lastSeasonSkin = snapshot.lastSeasonSkin || null;
+    notificationLog = Array.isArray(snapshot.notificationLog) ? snapshot.notificationLog : [];
+    dailyAtmosphere = snapshot.dailyAtmosphere || dailyAtmosphere;
+    hourlyFuelSpend = snapshot.hourlyFuelSpend || createFuelSpendTracker();
+
+    if(Array.isArray(snapshot.upgrades)){
+      for(const up of snapshot.upgrades){
+        const target = UPGRADES.find(u=>u.id===up.id);
+        if(target){ target.owned = !!up.owned; }
+      }
+    }
+
+    mismatchTracker.reset();
+    overloadMonitor.resolve();
+    updateOverloadUI();
+    renderNotificationLog();
+    renderDailyLog();
+    renderSeasonLog();
+    renderGenList();
+    renderCustList();
+    renderBuildables();
+    renderUpgrades();
+    renderQueue();
+    renderOffers();
+    renderBatteryStatus();
+    updateClock();
+    updateSeasonSkin();
+    applySeasonSkin(dailyReportPanel, SEASONS[seasonIndex]);
+    applySeasonSkin(seasonReportPanel, SEASONS[seasonIndex]);
+
+    const lastHistory = history[history.length-1] || {};
+    updateUI(lastHistory.demand||0, lastHistory.supply||0, lastHistory.balance||0, 0);
+    drawHistory();
+    setButtons();
+    toastMsg('Saved game loaded. Press Start to continue.');
   }
 
 // Function: setButtons() — purpose: [describe]. Returns: [value/void].
@@ -2148,6 +2302,116 @@ function updateGasFleetUI(){
     }
   }
 
+  function setSaveStatus(message='', type=''){
+    if(!saveGameStatusEl) return;
+    saveGameStatusEl.textContent = message;
+    saveGameStatusEl.classList.remove('status-success','status-error');
+    if(type==='success') saveGameStatusEl.classList.add('status-success');
+    if(type==='error') saveGameStatusEl.classList.add('status-error');
+  }
+
+  function setLoadStatus(message='', type=''){
+    if(!loadGameStatusEl) return;
+    loadGameStatusEl.textContent = message;
+    loadGameStatusEl.classList.remove('status-success','status-error');
+    if(type==='success') loadGameStatusEl.classList.add('status-success');
+    if(type==='error') loadGameStatusEl.classList.add('status-error');
+  }
+
+  let savingSnapshot = false;
+  async function saveGameProgress(){
+    if(savingSnapshot) return;
+    const name = (saveGameNameInput?.value || '').trim();
+    if(!name){
+      setSaveStatus('Enter a save name first.', 'error');
+      return;
+    }
+
+    try{
+      savingSnapshot = true;
+      if(saveGameBtn) saveGameBtn.disabled = true;
+      setSaveStatus('Saving your run...', '');
+
+      const snapshot = captureGameSnapshot();
+      const res = await fetch('/games/power-grid-tycoon/save-state', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ name, state: snapshot })
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok){
+        const message = data && typeof data.error === 'string' ? data.error : `Failed to save (status ${res.status})`;
+        throw new Error(message);
+      }
+
+      const save = data?.save;
+      setSaveStatus('Game saved! Keep the access code to load later.', 'success');
+      if(saveGameResultEl && save){
+        saveGameResultEl.innerHTML = `
+          <strong>${escapeHtml(save.name || name)}</strong>
+          <div>Save ID: <code>${escapeHtml(save.id)}</code></div>
+          <div>Access Code: <code>${escapeHtml(save.code)}</code></div>
+        `;
+      }
+    }catch(err){
+      console.error('Failed to save game snapshot', err);
+      const msg = err && typeof err.message === 'string' ? err.message : 'Unable to save your game.';
+      setSaveStatus(msg, 'error');
+    }finally{
+      savingSnapshot = false;
+      if(saveGameBtn) saveGameBtn.disabled = false;
+    }
+  }
+
+  let loadingSnapshot = false;
+  async function loadSavedGame(){
+    if(loadingSnapshot) return;
+    const identifier = (loadIdentifierInput?.value || '').trim();
+    const code = (loadCodeInput?.value || '').trim();
+    if(!identifier || !code){
+      setLoadStatus('Enter the save name or ID and the access code.', 'error');
+      return;
+    }
+
+    try{
+      loadingSnapshot = true;
+      if(loadGameBtn) loadGameBtn.disabled = true;
+      setLoadStatus('Loading save...', '');
+
+      const res = await fetch('/games/power-grid-tycoon/load-state', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ identifier, code })
+      });
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok){
+        const message = data && typeof data.error === 'string' ? data.error : `Failed to load (status ${res.status})`;
+        throw new Error(message);
+      }
+
+      if(data?.save?.state){
+        applyLoadedState(data.save.state);
+        setLoadStatus('Save loaded.', 'success');
+        if(saveGameResultEl && data.save){
+          saveGameResultEl.innerHTML = `
+            <strong>${escapeHtml(data.save.name || identifier)}</strong>
+            <div>Save ID: <code>${escapeHtml(data.save.id)}</code></div>
+            <div>Access Code: <code>${escapeHtml(data.save.code)}</code></div>
+          `;
+        }
+      }else{
+        throw new Error('Saved data was empty.');
+      }
+    }catch(err){
+      console.error('Failed to load saved game', err);
+      const msg = err && typeof err.message === 'string' ? err.message : 'Unable to load the saved game.';
+      setLoadStatus(msg, 'error');
+    }finally{
+      loadingSnapshot = false;
+      if(loadGameBtn) loadGameBtn.disabled = false;
+    }
+  }
+
   // ---------- Loop Controls ----------
   function start(){
     if(running) return;
@@ -2196,6 +2460,7 @@ function updateGasFleetUI(){
   el('#openOffers').addEventListener('click', ()=>{ renderOffers(); openModal('#modalOffers'); });
 // UI: Event listener for 'click'
   el('#openUpgrades').addEventListener('click', ()=>{ renderUpgrades(); openModal('#modalUpgrades'); });
+  if(openSaveLoadBtn) openSaveLoadBtn.addEventListener('click', ()=> openModal('#modalSaveLoad'));
 
 // UI: Event listener for 'click'
   el('#howto').addEventListener('click', ()=> openModal('#modalHowto'));
@@ -2207,6 +2472,9 @@ function updateGasFleetUI(){
   els('.modal').forEach(m=> m.addEventListener('click', (e)=>{ if(e.target===m) m.style.display='none'; }));
   if(leaderSaveBtn) leaderSaveBtn.addEventListener('click', saveLeaderboardEntry);
   if(leaderNameInput) leaderNameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); saveLeaderboardEntry(); }});
+  if(saveGameBtn) saveGameBtn.addEventListener('click', saveGameProgress);
+  if(loadGameBtn) loadGameBtn.addEventListener('click', loadSavedGame);
+  if(loadCodeInput) loadCodeInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); loadSavedGame(); }});
 
 // Function: renderLegend() - purpose: [describe]. Returns: [value/void].
   function renderLegend(){
