@@ -97,6 +97,29 @@ describe('powerGridLeaderboard service', () => {
     );
   });
 
+  it('coerces non-finite values instead of rejecting leaderboard saves', async () => {
+    const entry = await appendLeaderboardEntry({
+      name: 'Overflowing Player With A Very Long Name',
+      score: Number.POSITIVE_INFINITY,
+      profit: '123abc',
+      uptime: 'NaN',
+      emissions: Number.NEGATIVE_INFINITY,
+    });
+
+    assert.equal(entry.name, 'Overflowing Player With A Very L');
+    assert.equal(entry.score, Number.MAX_SAFE_INTEGER);
+    assert.equal(entry.profit, 0);
+    assert.equal(entry.uptime, 0);
+    assert.equal(entry.emissions, 0);
+
+    const stored = await getLeaderboard(1);
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].score, Number.MAX_SAFE_INTEGER);
+    assert.equal(stored[0].profit, 0);
+    assert.equal(stored[0].uptime, 0);
+    assert.equal(stored[0].emissions, 0);
+  });
+
   it('allows concurrent leaderboard saves from separate processes', async () => {
     const scriptUrl = new URL('../fixtures/append-leaderboard-entry.js', import.meta.url);
 
