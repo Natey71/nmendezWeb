@@ -48,6 +48,24 @@ describe('gameSaves service', () => {
     assert.deepEqual(loaded.state, snapshot);
   });
 
+  it('overwrites an existing save when the id and code match', async () => {
+    const original = await saveGameState({ name: 'Evening Run', state: { rep: 10 } });
+
+    const updated = await saveGameState({
+      name: 'Evening Run Continued',
+      state: { rep: 25 },
+      saveId: original.id,
+      code: original.code,
+    });
+
+    assert.equal(updated.id, original.id);
+    assert.equal(updated.code, original.code);
+
+    const loaded = await loadGameState({ identifier: original.id, code: original.code });
+    assert.equal(loaded.name, 'Evening Run Continued');
+    assert.deepEqual(loaded.state, { rep: 25 });
+  });
+
   it('loads by name when the access code matches', async () => {
     const saved = await saveGameState({ name: 'Morning Shift', state: { ticks: 123 } });
 
@@ -72,6 +90,10 @@ describe('gameSaves service', () => {
   it('validates required inputs', async () => {
     await assert.rejects(() => saveGameState({ name: '', state: {} }), /Save name is required/);
     await assert.rejects(() => saveGameState({ name: 'Valid', state: null }), /Game state payload is required/);
+    await assert.rejects(
+      () => saveGameState({ name: 'Missing Code', state: {}, saveId: 'id-only' }),
+      /Both save ID and access code are required/,
+    );
     await assert.rejects(
       () => loadGameState({ identifier: '', code: 'ABCD-EFGH' }),
       /A save identifier is required/,

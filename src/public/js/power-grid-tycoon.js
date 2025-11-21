@@ -2318,6 +2318,18 @@ function updateGasFleetUI(){
     if(type==='error') loadGameStatusEl.classList.add('status-error');
   }
 
+  let activeSaveMeta = null;
+  function rememberActiveSave(save){
+    if(save && save.id && save.code){
+      activeSaveMeta = { id: save.id, code: save.code, name: save.name || '' };
+      if(saveGameNameInput && save.name){
+        saveGameNameInput.value = save.name;
+      }
+    }else{
+      activeSaveMeta = null;
+    }
+  }
+
   let savingSnapshot = false;
   async function saveGameProgress(){
     if(savingSnapshot) return;
@@ -2333,10 +2345,15 @@ function updateGasFleetUI(){
       setSaveStatus('Saving your run...', '');
 
       const snapshot = captureGameSnapshot();
+      const payload = { name, state: snapshot };
+      if(activeSaveMeta?.id && activeSaveMeta?.code){
+        payload.saveId = activeSaveMeta.id;
+        payload.code = activeSaveMeta.code;
+      }
       const res = await fetch('/games/power-grid-tycoon/save-state', {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ name, state: snapshot })
+        body: JSON.stringify(payload)
       });
       const data = await res.json().catch(()=>({}));
       if(!res.ok){
@@ -2346,6 +2363,7 @@ function updateGasFleetUI(){
 
       const save = data?.save;
       setSaveStatus('Game saved! Keep the access code to load later.', 'success');
+      rememberActiveSave(save);
       if(saveGameResultEl && save){
         saveGameResultEl.innerHTML = `
           <strong>${escapeHtml(save.name || name)}</strong>
@@ -2392,6 +2410,7 @@ function updateGasFleetUI(){
       if(data?.save?.state){
         applyLoadedState(data.save.state);
         setLoadStatus('Save loaded.', 'success');
+        rememberActiveSave(data.save);
         if(saveGameResultEl && data.save){
           saveGameResultEl.innerHTML = `
             <strong>${escapeHtml(data.save.name || identifier)}</strong>
