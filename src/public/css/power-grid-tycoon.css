@@ -1093,3 +1093,49 @@ canvas {
 #overloadPill {
 	display: none !important;
 }
+.save-load-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 12px 0 4px;
+}
+
+.save-panel {
+  background: var(--surface, #0b1221);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.save-panel h3 {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+.save-panel .text-input {
+  width: 100%;
+  margin: 6px 0 10px;
+}
+
+.save-result {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(110, 231, 183, 0.08);
+  border: 1px solid rgba(110, 231, 183, 0.4);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.save-result strong {
+  display: block;
+}
+
+.status-error {
+  color: #fca5a5;
+}
+
+.status-success {
+  color: #86efac;
+}
