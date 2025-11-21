@@ -101,13 +101,23 @@ function sanitizeComputedEntry(raw) {
 		throw new Error('Computed leaderboard entry is required.');
 	}
 
-	const toFinite = (value, label) => {
-		const num = Number(value);
-		if (!Number.isFinite(num)) {
-			throw new Error(`Leaderboard entry is missing ${label}.`);
-		}
-		return num;
-	};
+        const toFinite = (value, label) => {
+                if (value === undefined || value === null) {
+                        throw new Error(`Leaderboard entry is missing ${label}.`);
+                }
+
+                const num = Number(value);
+
+                if (Number.isNaN(num)) {
+                        return 0;
+                }
+
+                if (!Number.isFinite(num)) {
+                        return num > 0 ? Number.MAX_SAFE_INTEGER : Number.MIN_SAFE_INTEGER;
+                }
+
+                return num;
+        };
 
 	const safeName = String(raw.name ?? '').trim().slice(0, 32) || 'Anonymous';
 	const score = toFinite(raw.score, 'score');

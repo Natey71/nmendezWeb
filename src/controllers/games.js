@@ -1,5 +1,6 @@
 import { appendLeaderboardEntry, getLeaderboard } from '../services/powerGridLeaderboard.js';
 import { scorePowerGridRun } from '../services/powerGridScoring.js';
+import { loadGameState, saveGameState } from '../services/gameSaves.js';
 
 export const getGamesList = (req, res) => {
 	res.render('games/index', {
@@ -26,13 +27,13 @@ export const getPowerGridTycoonLeaderboardPage = async (req, res, next) => {
 };
 
 export const getPowerGridTycoonLeaderboardData = async (req, res, next) => {
-	try {
-		const limit = Number.isFinite(Number(req.query.limit)) ? Number(req.query.limit) : undefined;
-		const entries = await getLeaderboard(limit);
-		res.json({ entries });
+        try {
+                const limit = Number.isFinite(Number(req.query.limit)) ? Number(req.query.limit) : undefined;
+                const entries = await getLeaderboard(limit);
+                res.json({ entries });
 	} catch (error) {
 		next(error);
-	}
+        }
 };
 
 export const postPowerGridTycoonLeaderboardEntry = async (req, res, next) => {
@@ -72,7 +73,41 @@ export const postPowerGridTycoonLeaderboardEntry = async (req, res, next) => {
 			stack: error?.stack,
 		});
 		next(error);
-	}
+        }
+};
+
+export const postPowerGridTycoonSaveState = async (req, res, next) => {
+        try {
+                const save = await saveGameState({
+                        name: req.body?.name,
+                        state: req.body?.state,
+                        saveId: req.body?.saveId,
+                        code: req.body?.code,
+                });
+
+                res.status(201).json({ save });
+        } catch (error) {
+                if (error?.status) {
+                        return res.status(error.status).json({ error: error.message });
+                }
+                next(error);
+        }
+};
+
+export const postPowerGridTycoonLoadState = async (req, res, next) => {
+        try {
+                const save = await loadGameState({
+                        identifier: req.body?.identifier,
+                        code: req.body?.code,
+                });
+
+                res.json({ save });
+        } catch (error) {
+                if (error?.status) {
+                        return res.status(error.status).json({ error: error.message });
+                }
+                next(error);
+        }
 };
 
 export const getTetrisPage = (req, res) => {

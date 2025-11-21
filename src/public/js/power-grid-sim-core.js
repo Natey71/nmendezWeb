@@ -46,7 +46,7 @@ export function finalizeSupplyDemandBalance({
     ? Math.max(0, Math.round(reserveMW))
     : Math.max(0, Math.round(adjustedDemand * reservePct));
   const oversupplyBeyondReserve = Math.max(0, oversupply - reserveTarget);
-  const deficit = adjustedDemand - supply;
+  const deficit = Math.max(0, adjustedDemand - supply);
 
   return {
     demand: adjustedDemand,

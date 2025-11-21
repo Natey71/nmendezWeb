@@ -41,6 +41,7 @@
                                                 <button id="openDailyReport" class="btn">Daily Reports</button>
                                                 <button id="openSeasonReport" class="btn">Season Reports</button>
                                                 <button id="howto" class="btn">How to Play</button>
+                                                <button id="openSaveLoad" class="btn">Save / Load</button>
                                                 <a href="/games/power-grid-tycoon/leaderboard" class="btn">Leaderboard</a>
                                         </div>
                                 </header>
@@ -83,7 +84,7 @@
                                 </section>
 
                                 <div id="overloadBanner" class="overload-banner" style="display:none">
-                                        <strong>OVERLOAD</strong> — fix in <span id="overloadRemain">45</span>s
+                                        <strong>OVERLOAD</strong> — fix in <span id="overloadRemainBanner" data-overload-remaining>45</span>s
                                         <span id="overloadReasonWrap"> — <span id="overloadReason"></span></span>
                                 </div>
 
@@ -179,7 +180,7 @@
                                                                 <div class="tight">
                                                                         <strong>Operations</strong>
                                                                         <span class="pill bad" id="overloadPill" style="display:none">OVERLOAD — fix in <span
-                                                                                        id="overloadRemain">45</span>s</span>
+                                                                                        id="overloadRemainPill" data-overload-remaining>45</span>s</span>
                                                                 </div>
                                                                 <div class="tight">
                                                                         <button id="openBuild" class="btn">Build</button>
@@ -336,6 +337,34 @@
                                         <ol id="seasonReportLog" class="period-log-list"></ol>
                                 </div>
                                 <button class="btn close" data-close="#seasonReportModal">Close</button>
+                        </div>
+                </div>
+
+                <!-- Save / Load Modal -->
+                <div id="modalSaveLoad" class="modal" aria-hidden="true">
+                        <div class="panel">
+                                <h2>Save or Load Your Grid</h2>
+                                <p class="muted small">Create a named save file and keep the access code to resume later.</p>
+                                <div class="save-load-grid">
+                                        <div class="save-panel">
+                                                <h3>Save Game</h3>
+                                                <label for="saveGameName" class="muted small">Save name</label>
+                                                <input id="saveGameName" class="text-input" type="text" maxlength="128" placeholder="Evening run" autocomplete="off" />
+                                                <button id="saveGameBtn" class="btn" type="button">Save Current Game</button>
+                                                <div id="saveGameStatus" class="small muted" aria-live="polite"></div>
+                                                <div id="saveGameResult" class="save-result" aria-live="polite"></div>
+                                        </div>
+                                        <div class="save-panel">
+                                                <h3>Load Saved Game</h3>
+                                                <label for="loadIdentifier" class="muted small">Save name or ID</label>
+                                                <input id="loadIdentifier" class="text-input" type="text" placeholder="Enter save name or ID" autocomplete="off" />
+                                                <label for="loadCode" class="muted small">Access code</label>
+                                                <input id="loadCode" class="text-input" type="text" placeholder="9C34-3HKL" autocomplete="off" />
+                                                <button id="loadGameBtn" class="btn" type="button">Load Saved Game</button>
+                                                <div id="loadGameStatus" class="small muted" aria-live="polite"></div>
+                                        </div>
+                                </div>
+                                <button class="btn close" data-close="#modalSaveLoad">Close</button>
                         </div>
                 </div>
 
