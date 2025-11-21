@@ -81,6 +81,8 @@ export const postPowerGridTycoonSaveState = async (req, res, next) => {
                 const save = await saveGameState({
                         name: req.body?.name,
                         state: req.body?.state,
+                        saveId: req.body?.saveId,
+                        code: req.body?.code,
                 });
 
                 res.status(201).json({ save });

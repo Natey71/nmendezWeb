@@ -164,22 +164,59 @@ function serializeState(state) {
   }
 }
 
-export async function saveGameState({ name, state }) {
+export async function saveGameState({ name, state, saveId, code }) {
   const safeName = normalizeName(name);
   const serializedState = serializeState(state);
-  const id = randomUUID();
-  const code = ensureUniqueCode();
+
+  const hasExistingSave = saveId !== undefined || code !== undefined;
+  if (hasExistingSave && (!saveId || !code)) {
+    const error = new Error('Both save ID and access code are required to overwrite an existing save.');
+    error.status = 400;
+    throw error;
+  }
+
   const createdAt = new Date().toISOString();
+
+  if (hasExistingSave) {
+    const id = normalizeIdentifier(saveId);
+    const accessCode = normalizeCode(code);
+
+    const existing = runSql(
+      'SELECT id FROM saved_games WHERE id=@id AND access_code=@code LIMIT 1;',
+      { id, code: accessCode },
+      { json: true },
+    );
+
+    if (!existing.length) {
+      const error = new Error('Save not found or access code is incorrect.');
+      error.status = 404;
+      throw error;
+    }
+
+    runSql(
+      `
+        UPDATE saved_games
+        SET name=@name, state=@state, created_at=@createdAt
+        WHERE id=@id AND access_code=@code;
+      `,
+      { id, name: safeName, code: accessCode, state: serializedState, createdAt },
+    );
+
+    return { id, name: safeName, code: accessCode, createdAt };
+  }
+
+  const id = randomUUID();
+  const accessCode = ensureUniqueCode();
 
   runSql(
     `
       INSERT INTO saved_games (id, name, access_code, state, created_at)
       VALUES (@id, @name, @code, @state, @createdAt);
     `,
-    { id, name: safeName, code, state: serializedState, createdAt },
+    { id, name: safeName, code: accessCode, state: serializedState, createdAt },
   );
 
-  return { id, name: safeName, code, createdAt };
+  return { id, name: safeName, code: accessCode, createdAt };
 }
 
 export async function loadGameState({ identifier, code }) {
