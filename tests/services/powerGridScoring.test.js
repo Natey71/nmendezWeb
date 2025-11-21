@@ -49,6 +49,45 @@ describe('scorePowerGridRun', () => {
     });
   });
 
+  it('accepts compact telemetry encoding for large payloads', () => {
+    const compactRun = {
+      version: 2,
+      difficulty: 'normal',
+      frames: [
+        {
+          t: 1,
+          d: 50,
+          s: 50,
+          p: 300,
+          f: 60,
+          h: 1 / 3600,
+          m: [1, 1],
+          g: [
+            ['coal', 60, 50, 1, 1, 0, 0, 0, 55, 900],
+          ],
+        },
+        {
+          t: 2,
+          d: 50,
+          s: 50,
+          p: 300,
+          f: 60,
+          h: 1 / 3600,
+          m: [1, 1],
+          g: [
+            ['coal', 60, 50, 1, 1, 0, 0, 0, 55, 900],
+          ],
+        },
+      ],
+    };
+
+    const result = scorePowerGridRun({ name: 'Dana', run: compactRun });
+
+    assert.equal(result.name, 'Dana');
+    assert.equal(result.score, 24886);
+    assert.equal(result.uptime, 100);
+  });
+
 
   it('rejects submissions with no telemetry frames', () => {
     const emptyRun = {

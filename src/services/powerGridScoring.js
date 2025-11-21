@@ -41,9 +41,45 @@ const readFinite = (value, label, index) => {
 };
 
 const fuelMultiplierFor = (fuelMultipliers, fuel) => {
-	const num = toFiniteNumber(fuelMultipliers?.[fuel]);
-	if (num === null || num <= 0) return 1;
-	return clamp(num, 0.1, 10);
+        const num = toFiniteNumber(fuelMultipliers?.[fuel]);
+        if (num === null || num <= 0) return 1;
+        return clamp(num, 0.1, 10);
+};
+
+const decodeFuelMultipliers = (raw) => {
+        if (Array.isArray(raw)) {
+                return {
+                        coal: raw[0],
+                        gas: raw[1],
+                };
+        }
+        return raw || {};
+};
+
+const decodeGenerators = (rawGenerators = [], frameIndex) => {
+        return rawGenerators.map((gen) => {
+                if (Array.isArray(gen)) {
+                        const [fuel, cap, actual, on, enabled, variable, fault, isBattery, opex, co2] = gen;
+                        return {
+                                fuel: typeof fuel === 'string' ? fuel : '',
+                                cap,
+                                actual,
+                                on: !!on,
+                                enabled: enabled !== 0 && enabled !== false,
+                                variable: !!variable,
+                                fault: !!fault,
+                                isBattery: !!isBattery,
+                                opex,
+                                co2,
+                        };
+                }
+
+                if (!gen || typeof gen !== 'object') {
+                        throw badRequest(`Invalid generator telemetry at frame ${frameIndex}.`);
+                }
+
+                return gen;
+        });
 };
 
 export function scorePowerGridRun(submission = {}) {
@@ -85,54 +121,54 @@ export function scorePowerGridRun(submission = {}) {
 	let totalEmissions = 0;
 	let uptimeTicks = 0;
 
-	frames.forEach((frame, frameIndex) => {
-		if (!frame || typeof frame !== 'object') {
-			throw badRequest(`Invalid telemetry frame at index ${frameIndex}.`);
-		}
+        frames.forEach((frame, frameIndex) => {
+                if (!frame || typeof frame !== 'object') {
+                        throw badRequest(`Invalid telemetry frame at index ${frameIndex}.`);
+                }
 
-		const tickHours = readNonNegative(frame.tickHours, 'tick duration', frameIndex);
-		if (tickHours <= 0 || tickHours > 1) {
-			throw badRequest(`Invalid tick duration at frame ${frameIndex}.`);
-		}
+                const tickHours = readNonNegative(frame.tickHours ?? frame.h, 'tick duration', frameIndex);
+                if (tickHours <= 0 || tickHours > 1) {
+                        throw badRequest(`Invalid tick duration at frame ${frameIndex}.`);
+                }
 
-		const demand = readNonNegative(frame.demand, 'demand', frameIndex);
-		const supplyReported = readFinite(frame.supply, 'supply', frameIndex);
-		const price = readNonNegative(frame.price, 'price', frameIndex);
-		readFinite(frame.freq, 'frequency', frameIndex);
+                const demand = readNonNegative(frame.demand ?? frame.d, 'demand', frameIndex);
+                const supplyReported = readFinite(frame.supply ?? frame.s, 'supply', frameIndex);
+                const price = readNonNegative(frame.price ?? frame.p, 'price', frameIndex);
+                readFinite(frame.freq ?? frame.f, 'frequency', frameIndex);
 
-		const generators = Array.isArray(frame.generators) ? frame.generators : null;
-		if (!generators || generators.length === 0) {
-			throw badRequest('Generator telemetry is missing.');
-		}
+                const generators = Array.isArray(frame.generators)
+                        ? frame.generators
+                        : Array.isArray(frame.g)
+                                ? frame.g
+                                : null;
+                if (!generators || generators.length === 0) {
+                        throw badRequest('Generator telemetry is missing.');
+                }
 
-		if (generators.length > MAX_GENERATORS_PER_FRAME) {
-			throw badRequest('Telemetry includes too many generators.');
-		}
+                if (generators.length > MAX_GENERATORS_PER_FRAME) {
+                        throw badRequest('Telemetry includes too many generators.');
+                }
 
-		const multipliers = frame.fuelMultipliers && typeof frame.fuelMultipliers === 'object'
-			? frame.fuelMultipliers
-			: {};
+                const multipliers = decodeFuelMultipliers(frame.fuelMultipliers ?? frame.m);
 
-		let computedSupply = 0;
-		let frameOpex = 0;
-		let frameEmissions = 0;
-		let installedCap = 0;
+                const decodedGenerators = decodeGenerators(generators, frameIndex);
 
-		generators.forEach((gen) => {
-			if (!gen || typeof gen !== 'object') {
-				throw badRequest(`Invalid generator telemetry at frame ${frameIndex}.`);
-			}
+                let computedSupply = 0;
+                let frameOpex = 0;
+                let frameEmissions = 0;
+                let installedCap = 0;
 
-			const cap = readNonNegative(gen.cap, 'generator capacity', frameIndex);
-			const actual = readFinite(gen.actual, 'generator output', frameIndex);
-			const opex = readNonNegative(gen.opex, 'generator operating cost', frameIndex);
-			const co2 = Math.max(0, toFiniteNumber(gen.co2) ?? 0);
-			const isBattery = !!gen.isBattery;
-			const on = !!gen.on;
-			const enabled = gen.enabled !== false;
-			const variable = !!gen.variable;
-			const fault = !!gen.fault;
-			const fuel = typeof gen.fuel === 'string' ? gen.fuel : '';
+                decodedGenerators.forEach((gen) => {
+                        const cap = readNonNegative(gen.cap, 'generator capacity', frameIndex);
+                        const actual = readFinite(gen.actual, 'generator output', frameIndex);
+                        const opex = readNonNegative(gen.opex, 'generator operating cost', frameIndex);
+                        const co2 = Math.max(0, toFiniteNumber(gen.co2) ?? 0);
+                        const isBattery = !!gen.isBattery;
+                        const on = !!gen.on;
+                        const enabled = gen.enabled !== false;
+                        const variable = !!gen.variable;
+                        const fault = !!gen.fault;
+                        const fuel = typeof gen.fuel === 'string' ? gen.fuel : '';
 
 			if (!isBattery) {
 				installedCap += cap;
