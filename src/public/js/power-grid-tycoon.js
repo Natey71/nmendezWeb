@@ -36,6 +36,10 @@ import {
   const fmt = n => Math.round(n).toLocaleString();
 // Function (arrow): clamp(n, lo, hi) — purpose: [describe].
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+  const toFinite = (value, fallback = 0) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+  };
 // Function (arrow): rand(a, b) — purpose: [describe].
   const rand = (a, b) => a + Math.random()*(b-a);
 // Function (arrow): choice(arr) — purpose: [describe].
@@ -255,7 +259,7 @@ import {
   let leaderboardEntries = [];
   let latestResult = null;
   let leaderboardSaving = false;
-  const TELEMETRY_VERSION = 1;
+  const TELEMETRY_VERSION = 2;
   const MAX_TELEMETRY_FRAMES = 3600;
   let runTelemetry = [];
   let currentHourIndex = 0;
@@ -400,7 +404,7 @@ import {
       events,
       fuelMultipliers,
       batteryCounter,
-      runTelemetry,
+      runTelemetry: compactRunTelemetry(runTelemetry),
       currentHourIndex,
       hourlyTotals,
       hourlyAverages,
@@ -455,7 +459,7 @@ import {
     events = Array.isArray(snapshot.events) ? snapshot.events : [];
     fuelMultipliers = snapshot.fuelMultipliers && typeof snapshot.fuelMultipliers==='object' ? snapshot.fuelMultipliers : { coal:1, gas:1 };
     batteryCounter = Number.isFinite(snapshot.batteryCounter) ? snapshot.batteryCounter : 0;
-    runTelemetry = Array.isArray(snapshot.runTelemetry) ? snapshot.runTelemetry : [];
+    runTelemetry = normalizeRunTelemetry(snapshot.runTelemetry);
     currentHourIndex = Number.isFinite(snapshot.currentHourIndex) ? snapshot.currentHourIndex : hourIndexFromSeconds(secondsInDay);
     hourlyTotals = snapshot.hourlyTotals && typeof snapshot.hourlyTotals==='object' ? snapshot.hourlyTotals : createPeriodTotals();
     hourlyAverages = snapshot.hourlyAverages && typeof snapshot.hourlyAverages==='object' ? snapshot.hourlyAverages : { demand:0, supply:0, income:0 };
@@ -1406,38 +1410,107 @@ import {
 
   function recordTelemetryFrame({ demand, supply, price, freq, tickHours }){
     if(runTelemetry.length >= MAX_TELEMETRY_FRAMES) return;
-    const toNumber = (value, fallback = 0)=>{
-      const num = Number(value);
-      return Number.isFinite(num) ? num : fallback;
-    };
-    const sanitizedTickHours = toNumber(tickHours, 0);
+    const sanitizedTickHours = toFinite(tickHours, 0);
     if(sanitizedTickHours <= 0) return;
     const frame = {
       tick: ticks,
-      demand: toNumber(demand, 0),
-      supply: toNumber(supply, 0),
-      price: toNumber(price, 0),
-      freq: toNumber(freq, TARGET_HZ),
+      demand: toFinite(demand, 0),
+      supply: toFinite(supply, 0),
+      price: toFinite(price, 0),
+      freq: toFinite(freq, TARGET_HZ),
       tickHours: Number(sanitizedTickHours.toFixed(6)),
       fuelMultipliers: {
-        coal: toNumber(fuelMultipliers.coal, 1),
-        gas: toNumber(fuelMultipliers.gas, 1)
+        coal: toFinite(fuelMultipliers.coal, 1),
+        gas: toFinite(fuelMultipliers.gas, 1)
       },
       generators: generators.map(g=>({
         id: g.id,
         fuel: g.fuel,
-        cap: toNumber(g.cap, 0),
-        actual: toNumber(g.actual, 0),
+        cap: toFinite(g.cap, 0),
+        actual: toFinite(g.actual, 0),
         on: !!g.on,
         enabled: !!g.enabled,
         variable: !!g.variable,
         fault: !!g.fault,
         isBattery: !!g.isBattery,
-        opex: toNumber(g.opex, 0),
-        co2: toNumber(g.co2, 0)
+        opex: toFinite(g.opex, 0),
+        co2: toFinite(g.co2, 0)
       }))
     };
     runTelemetry.push(frame);
+  }
+
+  function compactGenerator(gen){
+    return [
+      typeof gen.fuel === 'string' ? gen.fuel : '',
+      toFinite(gen.cap, 0),
+      toFinite(gen.actual, 0),
+      gen.on ? 1 : 0,
+      gen.enabled === false ? 0 : 1,
+      gen.variable ? 1 : 0,
+      gen.fault ? 1 : 0,
+      gen.isBattery ? 1 : 0,
+      toFinite(gen.opex, 0),
+      toFinite(gen.co2, 0)
+    ];
+  }
+
+  // Compact telemetry frames before sending them over the network to avoid 413 errors
+  // when saves or leaderboard posts include long runs with many generators.
+  function compactRunTelemetry(frames = []){
+    return (Array.isArray(frames) ? frames : []).map((frame)=>({
+      t: toFinite(frame.tick, 0),
+      d: toFinite(frame.demand, 0),
+      s: toFinite(frame.supply, 0),
+      p: toFinite(frame.price, 0),
+      f: toFinite(frame.freq, TARGET_HZ),
+      h: toFinite(frame.tickHours, 0),
+      m: [
+        toFinite(frame.fuelMultipliers?.coal, 1),
+        toFinite(frame.fuelMultipliers?.gas, 1)
+      ],
+      g: Array.isArray(frame.generators) ? frame.generators.map(compactGenerator) : []
+    }));
+  }
+
+  function expandCompactGenerators(rawList = []){
+    return rawList.map((gen)=>{
+      if(Array.isArray(gen)){
+        const [fuel, cap, actual, on, enabled, variable, fault, isBattery, opex, co2] = gen;
+        return {
+          fuel: typeof fuel === 'string' ? fuel : '',
+          cap: toFinite(cap, 0),
+          actual: toFinite(actual, 0),
+          on: !!on,
+          enabled: enabled !== 0 && enabled !== false,
+          variable: !!variable,
+          fault: !!fault,
+          isBattery: !!isBattery,
+          opex: toFinite(opex, 0),
+          co2: toFinite(co2, 0)
+        };
+      }
+      return gen;
+    });
+  }
+
+  function normalizeRunTelemetry(rawFrames){
+    if(!Array.isArray(rawFrames)) return [];
+    return rawFrames.map((frame)=>({
+      tick: toFinite(frame.tick ?? frame.t, 0),
+      demand: toFinite(frame.demand ?? frame.d, 0),
+      supply: toFinite(frame.supply ?? frame.s, 0),
+      price: toFinite(frame.price ?? frame.p, 0),
+      freq: toFinite(frame.freq ?? frame.f, TARGET_HZ),
+      tickHours: toFinite(frame.tickHours ?? frame.h, 0),
+      fuelMultipliers: Array.isArray(frame.m)
+        ? { coal: toFinite(frame.m[0], 1), gas: toFinite(frame.m[1], 1) }
+        : {
+            coal: toFinite(frame.fuelMultipliers?.coal, 1),
+            gas: toFinite(frame.fuelMultipliers?.gas, 1)
+          },
+      generators: expandCompactGenerators(frame.generators ?? frame.g)
+    }));
   }
 
   function normalizeDaySeconds(sec){
@@ -2239,11 +2312,7 @@ function updateGasFleetUI(){
     return {
       version: TELEMETRY_VERSION,
       difficulty,
-      frames: runTelemetry.map(frame=>({
-        ...frame,
-        fuelMultipliers: { ...frame.fuelMultipliers },
-        generators: frame.generators.map(g=>({ ...g }))
-      }))
+      frames: compactRunTelemetry(runTelemetry)
     };
   }
 
